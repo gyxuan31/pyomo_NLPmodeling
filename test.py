@@ -30,6 +30,10 @@ locux = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize 
 locuy = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location y
 locdux = np.zeros(num_DU) # initialize du location x
 locduy = np.zeros(num_DU) # initialize du location y
+plt.scatter(locdux[0], locduy[0], colorizer='red')
+plt.scatter(locux[0], locuy[0], colorizer='blue')
+plt.grid(True)
+plt.show()
 
 e = np.zeros((num_DU, num_UE, num_RB))
 p = np.zeros((num_DU, num_UE, num_RB))
@@ -97,10 +101,10 @@ for rho in range(num_DU):
     print("num_DU:", rho)
     model.obj = pyo.Objective(expr=model.minc[rho], sense=pyo.maximize)
     opt = SolverFactory('ipopt')
-    f = open('log.txt', 'w')
-    sys.stdout = f
-    model.pprint()
-    f.close()
+    # f = open('log.txt', 'w')
+    # sys.stdout = f
+    # model.pprint()
+    # f.close()
     result = opt.solve(model, tee=True)
     for i in range(num_UE):
         for j in range(num_RB):
