@@ -30,10 +30,10 @@ locux = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize 
 locuy = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location y
 locdux = np.zeros(num_DU) # initialize du location x
 locduy = np.zeros(num_DU) # initialize du location y
-plt.scatter(locdux[0], locduy[0], colorizer='red')
-plt.scatter(locux[0], locuy[0], colorizer='blue')
-plt.grid(True)
-plt.show()
+# plt.scatter(locdux[0], locduy[0], colorizer='red')
+# plt.scatter(locux[0], locuy[0], colorizer='blue')
+# plt.grid(True)
+# plt.show()
 
 e = np.zeros((num_DU, num_UE, num_RB))
 p = np.zeros((num_DU, num_UE, num_RB))
