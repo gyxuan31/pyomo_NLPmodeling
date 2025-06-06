@@ -23,7 +23,7 @@ X = np.random.randn(num_DU, num_UE, num_RB) # real
 Y = np.random.randn(num_DU, num_UE, num_RB) # img
 H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (num_DU, num_UE, num_RB)
 rayleigh_amplitude = np.abs(H)     # |h| Rayleigh(sigma=sqrt(1/2))
-rayleigh_gain = np.abs(H)**2          # |h|^2
+rayleigh_gain = np.abs(H)**2          # |h|^2 rayleigh_gain.shape = (num_DU, num_UE, num_RB)
 
 # Moving speed
 locux = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location x
@@ -70,9 +70,11 @@ def dc(model,rho,u,k):
     return model.d[rho,u,k] == rayleigh_gain[rho][u][k]*\
         pyo.sqrt((model.locux[rho,u]-model.locdux[rho])**2+(model.locuy[rho,u]-model.locduy[rho])**2+1e-6)**(-eta)
 model.dc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule=dc) # d = d*h
+
 model.I = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
 def Ic(model, rho, u, k):
-    return model.I[rho, u, k] == 1
+    return model.I[rho, u, k] == sum(model.e[i,j,k]*model.p[i,j,k]*model.d[i,j,k] for i in range(num_DU) for j in range(num_UE))\
+        - model.e[rho,u,k]*model.p[rho,u,k]*model.d[rho,u,k]
 model.Ic = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule=Ic)
 
 model.crb = pyo.Var(range(num_DU), range(num_UE), range(num_RB))
