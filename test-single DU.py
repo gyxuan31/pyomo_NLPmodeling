@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pyomo.environ as pyo
 from pyomo.opt import SolverFactory
 from pyomo.core.expr.numeric_expr import Expr_if
+from matplotlib.pyplot import MultipleLocator
 np.random.seed(0)
 np.set_printoptions(threshold=np.inf)
 
@@ -32,6 +33,12 @@ p = np.zeros((num_UE, num_RB))
 
 demand = np.random.randint(low=0, high=5, size=num_UE)
 print(demand)
+
+# Moving speed
+locux = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location x
+locuy = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location y
+locdux = np.zeros(num_DU) # initialize du location x
+locduy = np.zeros(num_DU) # initialize du location y
 
 # Model
 model = pyo.ConcreteModel()
@@ -85,3 +92,12 @@ for i in range(num_UE):
         p[i,j] = pyo.value(model.p[i,j])
         e[i,j] = pyo.value(model.e[i,j])
 print(e)
+
+plt.pcolor(e.T, edgecolors='lightgray', linewidths=0.6, cmap='Greys')
+ax = plt.gca()
+demandx = [str(v) for v in demand]
+ax.set_xticklabels(demandx, rotation=0)
+ax.xaxis.set_major_locator(MultipleLocator(1))
+plt.ylabel('RB')
+plt.xlabel('users')
+plt.show()

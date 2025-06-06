@@ -102,12 +102,12 @@ model.pmaxc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= 
 for rho in range(num_DU):
     print("num_DU:", rho)
     model.obj = pyo.Objective(expr=model.minc[rho], sense=pyo.maximize)
-    opt = SolverFactory('ipopt')
+    opt = SolverFactory('mindtpy')
     # f = open('log.txt', 'w')
     # sys.stdout = f
     # model.pprint()
     # f.close()
-    result = opt.solve(model, tee=True)
+    result = opt.solve(model, tee=True, time_limit=60)
     for i in range(num_UE):
         for j in range(num_RB):
             p[rho,i,j] = pyo.value(model.p[rho,i,j])
@@ -115,3 +115,4 @@ for rho in range(num_DU):
     model.obj.deactivate()
 
 print(e)
+del model
