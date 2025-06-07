@@ -38,7 +38,7 @@ locduy = np.zeros(num_DU) # initialize du location y
 e = np.zeros((num_DU, num_UE, num_RB))
 p = np.zeros((num_DU, num_UE, num_RB))
 
-demand = np.random.randint(low=0, high=10, size=(num_DU, num_UE))
+demand = np.random.randint(low=0, high=5, size=(num_DU, num_UE))
 
 # Model
 model = pyo.ConcreteModel()
@@ -99,20 +99,40 @@ model.pminc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= 
 model.pmaxc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= lambda model, rho, u, k:
     model.p[rho,u,k] <= P_max)
 
-for rho in range(num_DU):
-    print("num_DU:", rho)
-    model.obj = pyo.Objective(expr=model.minc[rho], sense=pyo.maximize)
-    opt = SolverFactory('mindtpy')
-    # f = open('log.txt', 'w')
-    # sys.stdout = f
-    # model.pprint()
-    # f.close()
-    result = opt.solve(model, tee=True, time_limit=60)
-    for i in range(num_UE):
-        for j in range(num_RB):
-            p[rho,i,j] = pyo.value(model.p[rho,i,j])
-            e[rho,i,j] = pyo.value(model.e[rho,i,j])
-    model.obj.deactivate()
+
+model.obj = pyo.Objective(expr=model.minc[0], sense=pyo.maximize)
+opt = SolverFactory('ipopt')
+# f = open('log.txt', 'w')
+# sys.stdout = f
+# model.pprint()
+# f.close()
+
+result = opt.solve(model, tee=True) # time_limit=60
+for i in range(num_UE):
+    for j in range(num_RB):
+        p[0,i,j] = pyo.value(model.p[0,i,j])
+        e[0,i,j] = pyo.value(model.e[0,i,j])
+model.obj.deactivate()
+del model.obj
+print("deactivate")
+
+# for rho in range(num_DU):
+#     print("num_DU:", rho)
+#     model.obj = pyo.Objective(expr=model.minc[rho], sense=pyo.maximize)
+#     opt = SolverFactory('mindtpy')
+#     # f = open('log.txt', 'w')
+#     # sys.stdout = f
+#     # model.pprint()
+#     # f.close()
+
+#     result = opt.solve(model, tee=True) # time_limit=60
+#     for i in range(num_UE):
+#         for j in range(num_RB):
+#             p[rho,i,j] = pyo.value(model.p[rho,i,j])
+#             e[rho,i,j] = pyo.value(model.e[rho,i,j])
+#     model.obj.deactivate()
+#     del model.obj
+#     print("deactivate")
 
 print(e)
 del model
