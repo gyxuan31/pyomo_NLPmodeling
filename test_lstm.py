@@ -1,64 +1,90 @@
-import torch
-import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.tsa.arima_process import ArmaProcess
+import torch
+import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler
 
-# 生成 ARMA 数据
 ar = np.array([1, -0.75, 0.25])
 ma = np.array([1, 0.65])
 arma = ArmaProcess(ar, ma)
 
-num_samples = 200
-seq_len = 20
+num_samples = 150
+length = 20
+num_ref = 2
+predicted_len = 10
+
 dataset = []
-for _ in range(num_samples):
-    series = arma.generate_sample(nsample=seq_len + 1)
-    dataset.append(series)
+for i in range(num_samples):
+    dataset.append(arma.generate_sample(nsample=length) + 50)
 
-dataset = np.array(dataset)
+X = []
+Y = []
+for series in dataset:
+    for t in range(num_ref, length):
+        
+        X.append(series[t-num_ref : t])
+        Y.append(series[t])
 
-X = dataset[:, :-1]
-Y = dataset[:, 1:]
+X = np.array(X)
+Y = np.array(Y)
 
-X = torch.tensor(X, dtype=torch.float32).unsqueeze(-1)  # shape: (batch, seq_len, 1)
-Y = torch.tensor(Y, dtype=torch.float32).unsqueeze(-1)  # shape: (batch, seq_len, 1)
+scaler_x = MinMaxScaler() # normalize
+scaler_y = MinMaxScaler()
+X_scaled = scaler_x.fit_transform(X).reshape(-1, num_ref, 1)
+Y_scaled = scaler_y.fit_transform(Y.reshape(-1, 1))
 
 class LSTMModel(nn.Module):
-    def __init__(self, input_size=1, hidden_size=32, num_layers=1):
+    def __init__(self):
         super().__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.lstm = nn.LSTM(input_size=1, hidden_size=32, batch_first=True)
+        self.fc = nn.Linear(32, 1)
 
     def forward(self, x):
-        out, _ = self.lstm(x)  # out: (batch, seq_len, hidden)
-        out = self.fc(out)     # out: (batch, seq_len, 1)
-        return out
+        out, _ = self.lstm(x)
+        return self.fc(out[:, -1, :])
 
 model = LSTMModel()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 loss_fn = nn.MSELoss()
 
-for epoch in range(100):
+X_train = torch.tensor(X_scaled, dtype=torch.float32)
+Y_train = torch.tensor(Y_scaled, dtype=torch.float32)
+
+for epoch in range(200):
     model.train()
-    out = model(X)
-    loss = loss_fn(out, Y)
+    output = model(X_train)
+    loss = loss_fn(output, Y_train)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    if epoch % 10 == 0:
-        print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
+    if epoch % 20 == 0:
+        print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
 
-test_series = arma.generate_sample(nsample=seq_len)
-input_seq = torch.tensor(test_series[:-1], dtype=torch.float32).view(1, -1, 1)
+
+test_series = arma.generate_sample(nsample=length) + 50
+predicted = list(test_series[:num_ref])
+
 model.eval()
-pred = model(input_seq).detach().numpy().flatten()
+
+for _ in range(predicted_len):
+    x_input = np.array(predicted[-num_ref:]).reshape(1, -1)
+    x_input_scaled = scaler_x.transform(x_input).reshape(1, num_ref, 1)
+    x_tensor = torch.tensor(x_input_scaled, dtype=torch.float32)
+    with torch.no_grad():
+        y_next_scaled = model(x_tensor).item()
+        y_next = scaler_y.inverse_transform([[y_next_scaled]])[0][0]
+    predicted.append(y_next)
 
 
-# plot
-plt.plot(range(seq_len), test_series, label="True")
-plt.plot(range(seq_len-1), pred, label="LSTM Predicted")
+plt.figure(figsize=(10, 4))
+plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
+plt.plot(range(len(test_series)), test_series, test_series, 'r--', label='True ARMA Sample')
+plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
+plt.xlabel("Time Step")
+plt.ylabel("Value")
+plt.title("LSTM Rolling Forecast from ARMA Sequence")
 plt.legend()
-plt.title("LSTM Predict ARMA Sequence")
 plt.grid(True)
+plt.tight_layout()
 plt.show()
