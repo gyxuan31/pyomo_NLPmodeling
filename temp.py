@@ -1,53 +1,89 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
 from statsmodels.tsa.arima_process import ArmaProcess
+import torch
+import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler
 
 ar = np.array([1, -0.75, 0.25])
 ma = np.array([1, 0.65])
 arma = ArmaProcess(ar, ma)
 
-num_samples = 100
-length = 50
-dataset = np.zeros((num_samples, length))
+num_samples = 150
+length = 20
+num_ref = 2
+predicted_len = 10
 
+dataset = []
 for i in range(num_samples):
-    dataset[i] = arma.generate_sample(nsample=length)
+    dataset.append(arma.generate_sample(nsample=length) + 50)
 
-X_train = []
-Y_train = []
-
+X = []
+Y = []
 for series in dataset:
-    for t in range(2, length):
-        X_train.append([series[t-2], series[t-1]])
-        Y_train.append(series[t])
+    for t in range(num_ref, length):
+        
+        X.append(series[t-num_ref : t])
+        Y.append(series[t])
 
-X_train = np.array(X_train)
-Y_train = np.array(Y_train)
+X = np.array(X)
+Y = np.array(Y)
 
-kernel = RBF(length_scale=1.0)
-gp = GaussianProcessRegressor(kernel=kernel, alpha=1e-2)
-gp.fit(X_train, Y_train)
+scaler_x = MinMaxScaler() # normalize
+scaler_y = MinMaxScaler()
+X_scaled = scaler_x.fit_transform(X).reshape(-1, num_ref, 1)
+Y_scaled = scaler_y.fit_transform(Y.reshape(-1, 1))
 
-test_series = arma.generate_sample(nsample=length)
+class LSTMModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size=1, hidden_size=32, batch_first=True)
+        self.fc = nn.Linear(32, 1)
 
-y0, y1 = test_series[0], test_series[1]
-predicted = [y0, y1]
+    def forward(self, x):
+        out, _ = self.lstm(x)
+        return self.fc(out[:, -1, :])
 
-future_len = 20
-for _ in range(future_len):
-    x_input = np.array([[predicted[-2], predicted[-1]]])
-    y_next = gp.predict(x_input)[0]
+model = LSTMModel()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+loss_fn = nn.MSELoss()
+
+X_train = torch.tensor(X_scaled, dtype=torch.float32)
+Y_train = torch.tensor(Y_scaled, dtype=torch.float32)
+
+for epoch in range(200):
+    model.train()
+    output = model(X_train)
+    loss = loss_fn(output, Y_train)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    if epoch % 20 == 0:
+        print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
+
+
+test_series = arma.generate_sample(nsample=length) + 50
+predicted = list(test_series[:num_ref])
+
+model.eval()
+
+for _ in range(predicted_len):
+    x_input = np.array(predicted[-num_ref:]).reshape(1, -1)
+    x_input_scaled = scaler_x.transform(x_input).reshape(1, num_ref, 1)
+    x_tensor = torch.tensor(x_input_scaled, dtype=torch.float32)
+    with torch.no_grad():
+        y_next_scaled = model(x_tensor).item()
+        y_next = scaler_y.inverse_transform([[y_next_scaled]])[0][0]
     predicted.append(y_next)
 
+
 plt.figure(figsize=(10, 4))
-plt.plot(range(len(test_series)), test_series, 'r--', label='True ARMA Sample')
-plt.plot(range(len(predicted)), predicted, 'b-', label='Predicted (GP Rolling)')
-plt.axvline(x=1, color='gray', linestyle='--', label='Prediction Start')
+plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
+plt.plot(range(len(test_series)), test_series, test_series, 'r--', label='True ARMA Sample')
+plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
 plt.xlabel("Time Step")
 plt.ylabel("Value")
-plt.title("GP Rolling Forecast from ARMA Sequence")
+plt.title("LSTM Rolling Forecast from ARMA Sequence")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
