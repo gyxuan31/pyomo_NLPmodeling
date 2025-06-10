@@ -11,7 +11,7 @@ arma = ArmaProcess(ar, ma)
 
 num_samples = 150
 length = 20
-num_ref = 2
+num_ref = 5
 predicted_len = 10
 
 dataset = []
@@ -22,7 +22,6 @@ X = []
 Y = []
 for series in dataset:
     for t in range(num_ref, length):
-        
         X.append(series[t-num_ref : t])
         Y.append(series[t])
 
@@ -60,7 +59,7 @@ for epoch in range(200):
     optimizer.step()
     if epoch % 20 == 0:
         print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
-
+ 
 
 test_series = arma.generate_sample(nsample=length) + 50
 predicted = list(test_series[:num_ref])
@@ -79,7 +78,7 @@ for _ in range(predicted_len):
 
 plt.figure(figsize=(10, 4))
 plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
-plt.plot(range(len(test_series)), test_series, test_series, 'r--', label='True ARMA Sample')
+plt.plot(range(len(test_series)), test_series, 'r--', label='True ARMA Sample')
 plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
 plt.xlabel("Time Step")
 plt.ylabel("Value")

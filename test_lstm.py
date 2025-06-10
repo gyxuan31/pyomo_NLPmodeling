@@ -4,6 +4,7 @@ from statsmodels.tsa.arima_process import ArmaProcess
 import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
+np.random.seed(0)
 
 ar = np.array([1, -0.75, 0.25])
 ma = np.array([1, 0.65])
@@ -11,7 +12,7 @@ arma = ArmaProcess(ar, ma)
 
 num_samples = 150
 length = 20
-num_ref = 2
+num_ref = 5
 predicted_len = 10
 
 dataset = []
@@ -51,7 +52,8 @@ loss_fn = nn.MSELoss()
 X_train = torch.tensor(X_scaled, dtype=torch.float32)
 Y_train = torch.tensor(Y_scaled, dtype=torch.float32)
 
-for epoch in range(200):
+loss_record = []
+for epoch in range(250):
     model.train()
     output = model(X_train)
     loss = loss_fn(output, Y_train)
@@ -60,6 +62,7 @@ for epoch in range(200):
     optimizer.step()
     if epoch % 20 == 0:
         print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
+        loss_record.append(loss.item())
 
 
 test_series = arma.generate_sample(nsample=length) + 50
@@ -76,11 +79,19 @@ for _ in range(predicted_len):
         y_next = scaler_y.inverse_transform([[y_next_scaled]])[0][0]
     predicted.append(y_next)
 
+# plt.figure()
+# plt.plot(loss_record)
+# plt.title('model train vs validation loss')
+# plt.ylabel('loss')
+# plt.xlabel('epoch')
+# plt.legend(['train','validation'], loc='upper right')
+# plt.show()
 
 plt.figure(figsize=(10, 4))
 plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
-plt.plot(range(len(test_series)), test_series, test_series, 'r--', label='True ARMA Sample')
+plt.plot(range(len(test_series)), test_series, 'r--', label='True ARMA Sample')
 plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
+plt.xticks(np.arange(0, length + 1, 1))
 plt.xlabel("Time Step")
 plt.ylabel("Value")
 plt.title("LSTM Rolling Forecast from ARMA Sequence")

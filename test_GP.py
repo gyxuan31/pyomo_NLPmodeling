@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
 from statsmodels.tsa.arima_process import ArmaProcess
+np.random.seed(0)
 
 ar = np.array([1, -0.75, 0.25]) # y[t] = 0.75*y[t-1] - 0.25*y[t-2]
 ma = np.array([1, 0.65]) # e[t] + 0.65*e[t-1]
