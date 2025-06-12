@@ -87,9 +87,12 @@ model.cuc = pyo.Constraint(range(num_DU), range(num_UE),
                              rule= lambda model,rho,u: 
                                 model.cu[rho,u] == sum(model.crb[rho,u,k] for k in range(num_RB)))
 
-model.minc = pyo.Var(range(num_DU))
-model.mincc = pyo.Constraint(range(num_DU), range(num_UE), rule= lambda model,rho,u: 
-    model.minc[rho] <= model.cu[rho,u])
+# model.minc = pyo.Var(range(num_DU))
+# model.mincc = pyo.Constraint(range(num_DU), range(num_UE), rule= lambda model,rho,u: 
+#     model.minc[rho] <= model.cu[rho,u])
+
+model.lncsum = pyo.Var()
+model.lncsumc = pyo.Constraint(expr=model.lncsum==sum(pyo.log(model.cu[i,j])for i in range(num_DU) for j in range(num_UE)))
 
 # constraints
 model.numrbc = pyo.Constraint(range(num_DU), rule= lambda model,rho:
@@ -100,8 +103,8 @@ model.pmaxc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= 
     model.p[rho,u,k] <= P_max)
 
 
-model.obj = pyo.Objective(expr=model.minc[0], sense=pyo.maximize)
-opt = SolverFactory('ipopt')
+model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
+opt = SolverFactory('mindtpy')
 # f = open('log.txt', 'w')
 # sys.stdout = f
 # model.pprint()
