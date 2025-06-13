@@ -94,11 +94,11 @@ def allocation():
             e[i,j] = pyo.value(model.e[i,j])
     print(e)
 
-plt.pcolor(e.T, edgecolors='lightgray', linewidths=0.6, cmap='Greys')
-ax = plt.gca()
-demandx = [str(v) for v in demand]
-ax.set_xticklabels(demandx, rotation=0)
-ax.xaxis.set_major_locator(MultipleLocator(1))
-plt.ylabel('RB')
-plt.xlabel('users')
-plt.show()
+    # plt.pcolor(e.T, edgecolors='lightgray', linewidths=0.6, cmap='Greys')
+    # ax = plt.gca()
+    # demandx = [str(v) for v in demand]
+    # ax.set_xticklabels(demandx, rotation=0)
+    # ax.xaxis.set_major_locator(MultipleLocator(1))
+    # plt.ylabel('RB')
+    # plt.xlabel('users')
+    # plt.show()
