@@ -7,7 +7,7 @@ import pyomo.environ as pyo
 from pyomo.opt import SolverFactory
 from pyomo.core.expr.numeric_expr import Expr_if
 from matplotlib.pyplot import MultipleLocator
-np.random.seed(0)
+np.random.seed(1)
 np.set_printoptions(threshold=np.inf)
 
 def allocation():
@@ -36,10 +36,10 @@ def allocation():
     print(demand)
 
     # Moving speed
-    locux = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location x
-    locuy = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location y
-    locdux = np.zeros(num_DU) # initialize du location x
-    locduy = np.zeros(num_DU) # initialize du location y
+    # locux = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location x
+    # locuy = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location y
+    # locdux = np.zeros(num_DU) # initialize du location x
+    # locduy = np.zeros(num_DU) # initialize du location y
 
     # Model
     model = pyo.ConcreteModel()

@@ -8,9 +8,9 @@ np.set_printoptions(threshold=np.inf)
 
 T = 100
 
-num_UE = 30
+num_UE = 10
 num_DU = 3
-num_RB = 60 # num RB/DU {60, 80, 100}
+num_RB = 30 # num RB/DU {60, 80, 100}
 B = 200*1e3 # bandwidth of 1 RB
 B_total = 12*1e6 # total bandwidth/DU
 P_min = 3
@@ -104,12 +104,12 @@ model.pmaxc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= 
 
 
 model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
-opt = SolverFactory('mindtpy')
+opt = SolverFactory('ipopt')
 # f = open('log.txt', 'w')
 # sys.stdout = f
 # model.pprint()
 # f.close()
-
+model.pprint()
 result = opt.solve(model, tee=True) # time_limit=60
 for i in range(num_UE):
     for j in range(num_RB):
