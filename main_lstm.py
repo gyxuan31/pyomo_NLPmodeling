@@ -16,11 +16,11 @@ class LSTMModel(nn.Module):
         out, _ = self.lstm(x)
         return self.fc(out[:, -1, :])
 
-def predict(test_sequence):
+def train(num_ref, predicted_len):
     num_samples = 150
-    length = 20
-    num_ref = 5
-    predicted_len = 10
+    sequence_length = 20
+    num_ref = num_ref
+    predicted_len = predicted_len
     
     # Generate training sequence
     ar = np.array([1, -0.75, 0.25])
@@ -29,13 +29,13 @@ def predict(test_sequence):
 
     training_sequence = []
     for i in range(num_samples):
-        training_sequence.append(arma.generate_sample(nsample=length) + 50)
+        training_sequence.append(arma.generate_sample(nsample=sequence_length) + 50)
 
     # Generate training dataset
     X = []
     Y = []
     for series in training_sequence:
-        for t in range(num_ref, length):
+        for t in range(num_ref, sequence_length):
             X.append(series[t-num_ref : t])
             Y.append(series[t])
 
@@ -66,6 +66,9 @@ def predict(test_sequence):
         if epoch % 20 == 0:
             print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
             loss_record.append(loss.item())
+    return model, scaler_x, scaler_y
+
+def predict(model, num_ref, predicted_len, test_sequence, scaler_x, scaler_y):
 
     # Generate test dataset
     test_sequence = test_sequence
@@ -83,25 +86,26 @@ def predict(test_sequence):
         predicted.append(y_next)
     return predicted
 
-num_samples = 150
-length = 20
-num_ref = 5
-predicted_len = 10
-ar = np.array([1, -0.75, 0.25])
-ma = np.array([1, 0.65])
-arma = ArmaProcess(ar, ma)
-test_sequence = arma.generate_sample(nsample=length) + 50
-predicted = predict(test_sequence)
+if __name__ == 'main':
+    num_samples = 150
+    sequence_length = 20
+    num_ref = 5
+    predicted_len = 10
+    ar = np.array([1, -0.75, 0.25])
+    ma = np.array([1, 0.65])
+    arma = ArmaProcess(ar, ma)
+    test_sequence = arma.generate_sample(nsample=sequence_length) + 50
+    predicted = predict(test_sequence)
 
-plt.figure(figsize=(10, 4))
-plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
-plt.plot(range(len(test_sequence)), test_sequence, 'r--', label='True ARMA Sample')
-plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
-plt.xticks(np.arange(0, length + 1, 1))
-plt.xlabel("Time Step")
-plt.ylabel("Value")
-plt.title("LSTM Rolling Forecast from ARMA Sequence")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+    plt.figure(figsize=(10, 4))
+    plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
+    plt.plot(range(len(test_sequence)), test_sequence, 'r--', label='True ARMA Sample')
+    plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
+    plt.xticks(np.arange(0, sequence_length + 1, 1))
+    plt.xlabel("Time Step")
+    plt.ylabel("Value")
+    plt.title("LSTM Rolling Forecast from ARMA Sequence")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
