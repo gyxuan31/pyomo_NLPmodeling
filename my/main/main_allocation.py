@@ -33,13 +33,8 @@ def allocation():
     p = np.zeros((num_UE, num_RB))
 
     demand = np.random.randint(low=0, high=5, size=num_UE)
+    demand = B*np.log(1+P_min*rayleigh_gain)
     print(demand)
-
-    # Moving speed
-    # locux = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location x
-    # locuy = np.random.randint(low=-10, high=10, size=num_UE) # initialize users location y
-    # locdux = np.zeros(num_DU) # initialize du location x
-    # locduy = np.zeros(num_DU) # initialize du location y
 
     # Model
     model = pyo.ConcreteModel()

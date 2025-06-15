@@ -38,7 +38,7 @@ locduy = np.zeros(num_DU) # initialize du location y
 e = np.zeros((num_DU, num_UE, num_RB))
 p = np.zeros((num_DU, num_UE, num_RB))
 
-demand = np.random.randint(low=0, high=5, size=(num_DU, num_UE))
+demand = np.random.randint(low=0, high=3, size=(num_DU, num_UE))
 
 # Model
 model = pyo.ConcreteModel()
