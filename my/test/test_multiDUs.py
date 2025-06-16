@@ -6,7 +6,7 @@ import sys
 np.random.seed(0)
 np.set_printoptions(threshold=np.inf)
 
-T = 20
+T = 100
 
 num_UE = 10
 num_DU = 3
@@ -109,7 +109,7 @@ opt = SolverFactory('ipopt')
 # sys.stdout = f
 # model.pprint()
 # f.close()
-model.pprint()
+# model.pprint()
 result = opt.solve(model, tee=True) # time_limit=60
 for i in range(num_UE):
     for j in range(num_RB):
