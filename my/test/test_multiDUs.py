@@ -6,7 +6,7 @@ import sys
 np.random.seed(0)
 np.set_printoptions(threshold=np.inf)
 
-T = 100
+T = 20
 
 num_UE = 10
 num_DU = 3
