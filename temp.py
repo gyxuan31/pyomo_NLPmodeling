@@ -1,89 +1,141 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from statsmodels.tsa.arima_process import ArmaProcess
-import torch
-import torch.nn as nn
-from sklearn.preprocessing import MinMaxScaler
+import pyomo.environ as pyo
+from pyomo.opt import SolverFactory
+import sys
+np.random.seed(0)
+np.set_printoptions(threshold=np.inf)
 
-ar = np.array([1, -0.75, 0.25])
-ma = np.array([1, 0.65])
-arma = ArmaProcess(ar, ma)
+T = 100
 
-num_samples = 150
-length = 20
-num_ref = 5
-predicted_len = 10
+num_UE = 10
+num_DU = 3
+num_RB = 30 # num RB/DU {60, 80, 100}
+B = 200*1e3 # bandwidth of 1 RB
+B_total = 12*1e6 # total bandwidth/DU
+P_min = 3
+P_max = 6
+sigmsqr = -173 # dBm
+eta = 2
 
-dataset = []
-for i in range(num_samples):
-    dataset.append(arma.generate_sample(nsample=length) + 50)
+# Rayleigh fading
+X = np.random.randn(num_DU, num_UE, num_RB) # real
+Y = np.random.randn(num_DU, num_UE, num_RB) # img
+H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (num_DU, num_UE, num_RB)
+rayleigh_amplitude = np.abs(H)     # |h| Rayleigh(sigma=sqrt(1/2))
+rayleigh_gain = np.abs(H)**2          # |h|^2 rayleigh_gain.shape = (num_DU, num_UE, num_RB)
 
-X = []
-Y = []
-for series in dataset:
-    for t in range(num_ref, length):
-        X.append(series[t-num_ref : t])
-        Y.append(series[t])
+# UE locations
+locux = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location x
+locuy = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location y
+locdux = np.zeros(num_DU) # initialize du location x
+locduy = np.zeros(num_DU) # initialize du location y
+# plt.scatter(locdux[0], locduy[0], colorizer='red')
+# plt.scatter(locux[0], locuy[0], colorizer='blue')
+# plt.grid(True)
+# plt.show()
 
-X = np.array(X)
-Y = np.array(Y)
+e = np.zeros((num_DU, num_UE, num_RB))
+p = np.zeros((num_DU, num_UE, num_RB))
 
-scaler_x = MinMaxScaler() # normalize
-scaler_y = MinMaxScaler()
-X_scaled = scaler_x.fit_transform(X).reshape(-1, num_ref, 1)
-Y_scaled = scaler_y.fit_transform(Y.reshape(-1, 1))
+demand = np.random.randint(low=0, high=3, size=(num_DU, num_UE))
 
-class LSTMModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.lstm = nn.LSTM(input_size=1, hidden_size=32, batch_first=True)
-        self.fc = nn.Linear(32, 1)
+# Model
+model = pyo.ConcreteModel()
+model.e = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Binary)
+model.p = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
 
-    def forward(self, x):
-        out, _ = self.lstm(x)
-        return self.fc(out[:, -1, :])
+model.demand = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
+def demandc(model, rho, u):
+    return model.demand[rho, u] == demand[rho][u]
+model.demandc = pyo.Constraint(range(num_DU), range(num_UE), rule=demandc)
+model.demandsatisfy = pyo.Constraint(range(num_DU), range(num_UE), 
+                                 rule=lambda model,rho,u: sum(model.e[rho,u,k]for k in range(num_RB))>=model.demand[rho,u])
 
-model = LSTMModel()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-loss_fn = nn.MSELoss()
+model.locux = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
+model.locuxc = pyo.Constraint(range(num_DU), range(num_UE), rule=lambda model,rho,u:
+    model.locux[rho,u] == locux[rho][u])
+model.locuy = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
+model.locuyc = pyo.Constraint(range(num_DU), range(num_UE), rule=lambda model,rho,u:
+    model.locuy[rho,u] == locuy[rho][u])
+model.locdux = pyo.Var(range(num_DU), domain=pyo.Reals)
+model.locduxc = pyo.Constraint(range(num_DU), rule=lambda model,rho:
+    model.locdux[rho] == locdux[rho])
+model.locduy = pyo.Var(range(num_DU), domain=pyo.Reals)
+model.locduyc = pyo.Constraint(range(num_DU), rule=lambda model,rho:
+    model.locduy[rho] == locduy[rho])
 
-X_train = torch.tensor(X_scaled, dtype=torch.float32)
-Y_train = torch.tensor(Y_scaled, dtype=torch.float32)
+model.d = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
+def dc(model,rho,u,k):
+    return model.d[rho,u,k] == rayleigh_gain[rho][u][k]*\
+        pyo.sqrt((model.locux[rho,u]-model.locdux[rho])**2+(model.locuy[rho,u]-model.locduy[rho])**2+1e-6)**(-eta)
+model.dc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule=dc) # d = d*h
 
-for epoch in range(200):
-    model.train()
-    output = model(X_train)
-    loss = loss_fn(output, Y_train)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    if epoch % 20 == 0:
-        print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
- 
+model.I = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
+def Ic(model, rho, u, k):
+    return model.I[rho, u, k] == sum(model.e[i,j,k]*model.p[i,j,k]*model.d[i,j,k] for i in range(num_DU) for j in range(num_UE))\
+        - model.e[rho,u,k]*model.p[rho,u,k]*model.d[rho,u,k]
+model.Ic = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule=Ic)
 
-test_series = arma.generate_sample(nsample=length) + 50
-predicted = list(test_series[:num_ref])
+model.crb = pyo.Var(range(num_DU), range(num_UE), range(num_RB))
+def crbc(model,rho,u,k):
+    return model.crb[rho, u, k] == B * model.e[rho,u,k] * pyo.log(1+model.p[rho,u,k]*model.d[rho,u,k]/(model.I[rho,u,k]+sigmsqr))
+model.crbc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule = crbc)
 
-model.eval()
+model.cu = pyo.Var(range(num_DU), range(num_UE))
+model.cuc = pyo.Constraint(range(num_DU), range(num_UE), 
+                             rule= lambda model,rho,u: 
+                                model.cu[rho,u] == sum(model.crb[rho,u,k] for k in range(num_RB)))
 
-for _ in range(predicted_len):
-    x_input = np.array(predicted[-num_ref:]).reshape(1, -1)
-    x_input_scaled = scaler_x.transform(x_input).reshape(1, num_ref, 1)
-    x_tensor = torch.tensor(x_input_scaled, dtype=torch.float32)
-    with torch.no_grad():
-        y_next_scaled = model(x_tensor).item()
-        y_next = scaler_y.inverse_transform([[y_next_scaled]])[0][0]
-    predicted.append(y_next)
+# model.minc = pyo.Var(range(num_DU))
+# model.mincc = pyo.Constraint(range(num_DU), range(num_UE), rule= lambda model,rho,u: 
+#     model.minc[rho] <= model.cu[rho,u])
+
+model.lncsum = pyo.Var()
+model.lncsumc = pyo.Constraint(expr=model.lncsum==sum(pyo.log(model.cu[i,j])for i in range(num_DU) for j in range(num_UE)))
+
+# constraints
+model.numrbc = pyo.Constraint(range(num_DU), rule= lambda model,rho:
+    sum(sum(model.e[rho,u,k] for k in range(num_RB))for u in range(num_UE)) <=num_RB)
+model.pminc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= lambda model, rho, u, k:
+    model.p[rho,u,k] >= P_min)
+model.pmaxc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= lambda model, rho, u, k:
+    model.p[rho,u,k] <= P_max)
 
 
-plt.figure(figsize=(10, 4))
-plt.plot(range(len(predicted)), predicted, label='Predicted (LSTM Rolling)', color='blue')
-plt.plot(range(len(test_series)), test_series, 'r--', label='True ARMA Sample')
-plt.axvline(x=num_ref-1, color='gray', linestyle='--', label='Prediction Start')
-plt.xlabel("Time Step")
-plt.ylabel("Value")
-plt.title("LSTM Rolling Forecast from ARMA Sequence")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
+opt = SolverFactory('ipopt')
+# f = open('log.txt', 'w')
+# sys.stdout = f
+# model.pprint()
+# f.close()
+model.pprint()
+result = opt.solve(model, tee=True) # time_limit=60
+for i in range(num_UE):
+    for j in range(num_RB):
+        p[0,i,j] = pyo.value(model.p[0,i,j])
+        e[0,i,j] = pyo.value(model.e[0,i,j])
+model.obj.deactivate()
+del model.obj
+print("deactivate")
+
+# for rho in range(num_DU):
+#     print("num_DU:", rho)
+#     model.obj = pyo.Objective(expr=model.minc[rho], sense=pyo.maximize)
+#     opt = SolverFactory('mindtpy')
+#     # f = open('log.txt', 'w')
+#     # sys.stdout = f
+#     # model.pprint()
+#     # f.close()
+
+#     result = opt.solve(model, tee=True) # time_limit=60
+#     for i in range(num_UE):
+#         for j in range(num_RB):
+#             p[rho,i,j] = pyo.value(model.p[rho,i,j])
+#             e[rho,i,j] = pyo.value(model.e[rho,i,j])
+#     model.obj.deactivate()
+#     del model.obj
+#     print("deactivate")
+
+print(e)
+del model
