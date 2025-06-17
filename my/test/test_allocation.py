@@ -100,7 +100,7 @@ model.demandc = pyo.Constraint(range(horizon), range(num_DU), range(num_UE), rul
 model.demandsatisfy = pyo.Constraint(range(horizon), range(num_DU), range(num_UE), 
                             rule=lambda model,t,rho,u: model.cu[t,rho,u]>=model.demand[t,rho,u])
 model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
-opt = SolverFactory('cplex')
+opt = SolverFactory('gdpopt')
 opt.options['max_iter'] = 3000
 result = opt.solve(model, tee=True) # time_limit=60
 

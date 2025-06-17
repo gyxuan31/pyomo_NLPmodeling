@@ -36,7 +36,7 @@ for t in range(num_ref, T):
         current_req = predicted[0]
         req_pred[i][t] = current_req # implement the first requirement
         for j in range(predicted_len):
-            R[i][j] = predicted[j]
+            R[i][j] = predicted[j] # R.shape=(num_UE, predicted_len)
     # Allocaiton
     geo_c_temp, alpha_temp = allocation(R)
     geo_c.append(geo_c_temp)

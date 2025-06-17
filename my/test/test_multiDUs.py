@@ -11,12 +11,11 @@ T = 100
 
 num_UE = 10
 num_DU = 3
-num_RB = 60 # num RB/DU {60, 80, 100}
+num_RB = 60 
 B = 200*1e3 # bandwidth of 1 RB
-B_total = 12*1e6 # total bandwidth/DU
 P_min = 0.3
 P_max = 0.6
-sigmsqr = 10**((-173-30)/10) # dBm
+sigmsqr = 10**((-173-30)/10) # watt
 eta = 2
 alpha = [round(x * 0.1, 1) for x in range(10, 0, -1)]
 
@@ -80,9 +79,9 @@ model.cuc = pyo.Constraint(range(num_DU), range(num_UE),
                              rule= lambda model,rho,u: 
                                 model.cu[rho,u] == sum(model.crb[rho,u,k] for k in range(num_RB)))
 
-model.lncsum = pyo.Var()
-###########
-model.lncsumc = pyo.Constraint(expr=model.lncsum == sum((model.cu[i,j]+0.01)for i in range(num_DU) for j in range(num_UE))/num_UE*num_DU)
+# model.lncsum = pyo.Var()
+# ###########
+# model.lncsumc = pyo.Constraint(expr=model.lncsum == sum((model.cu[i,j]+0.01)for i in range(num_DU) for j in range(num_UE))/num_UE*num_DU)
 
 # constraints
 model.numrbc = pyo.Constraint(range(num_DU), rule= lambda model,rho:
@@ -99,9 +98,9 @@ def demandc(model, rho, u):
 model.demandc = pyo.Constraint(range(num_DU), range(num_UE), rule=demandc)
 model.demandsatisfy = pyo.Constraint(range(num_DU), range(num_UE), 
                             rule=lambda model,rho,u: model.cu[rho,u]>=model.demand[rho,u])
-model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
-opt = SolverFactory('ipopt')
-opt.options['max_iter'] = 3000
+model.obj = pyo.Objective(expr=pyo.prod(model.cu[i,j]for i in range(num_DU) for j in range(num_UE)), sense=pyo.maximize)
+opt = SolverFactory('mindtpy')
+# opt.options['max_iter'] = 3000
 result = opt.solve(model, tee=True) # time_limit=60
 
 d_value = []
