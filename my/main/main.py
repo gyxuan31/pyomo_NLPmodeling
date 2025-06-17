@@ -9,6 +9,8 @@ num_ref = 5
 predicted_len = 10
 num_UE = 90
 
+R = np.zeros((num_UE, predicted_len))
+
 ar = np.array([1, -0.75, 0.25])
 ma = np.array([1, 0.65])
 arma = ArmaProcess(ar, ma)
@@ -22,13 +24,23 @@ for i in range(num_UE):
 
 model, scaler_x, scaler_y = train(num_ref, predicted_len)
 
+geo_c = [] # len=T
+alpha = [] # len=T
+
 for t in range(num_ref, T):
     for i in range(num_UE):
         history_req = req_true[i][t-num_ref : t]
         predicted = predict(model, num_ref, predicted_len, history_req, scaler_x, scaler_y)
         predicted = predicted[num_ref:] # save only the predicted term, not the first five reference value
+
         current_req = predicted[0]
         req_pred[i][t] = current_req # implement the first requirement
+        for j in range(predicted_len):
+            R[i][j] = predicted[j]
+    # Allocaiton
+    geo_c_temp, alpha_temp = allocation(R)
+    geo_c.append(geo_c_temp)
+    alpha.append(alpha_temp)
 
 
 plt.figure(figsize=(10, 4))

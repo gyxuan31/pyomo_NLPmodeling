@@ -10,7 +10,7 @@ from matplotlib.pyplot import MultipleLocator
 np.random.seed(1)
 np.set_printoptions(threshold=np.inf)
 
-def allocation():
+def allocation(R):
     T = 100
 
     num_UE = 30
@@ -21,12 +21,14 @@ def allocation():
     P_min = 3
     P_max = 6
     sigmsqr = -173
+    
+    geo_c = 0
+    alpha = 1
 
     # Rayleigh fading
     X = np.random.randn(num_UE, num_RB) # real
     Y = np.random.randn(num_UE, num_RB) # img
     H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (num_UE, num_RB)
-    rayleigh_amplitude = np.abs(H)     # |h| Rayleigh(sigma=sqrt(1/2))
     rayleigh_gain = np.abs(H)**2          # |h|^2
 
     e = np.zeros((num_UE, num_RB))
@@ -97,3 +99,4 @@ def allocation():
     # plt.ylabel('RB')
     # plt.xlabel('users')
     # plt.show()
+    return geo_c, alpha

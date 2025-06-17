@@ -19,6 +19,7 @@ P_max = 0.6
 sigmsqr = 10**((-173-30)/10) # dBm
 eta = 2
 alpha = [round(x * 0.1, 1) for x in range(10, 0, -1)]
+horizon = 10
 
 # Rayleigh fading
 X = np.random.randn(num_DU, num_UE, num_RB) # real
@@ -54,8 +55,8 @@ for rho in range(num_DU):
 print(a[4])
 # Model
 model = pyo.ConcreteModel()
-model.e = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Binary)
-model.p = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
+model.e = pyo.Var(range(horizon), range(num_DU), range(num_UE), range(num_RB), domain=pyo.Binary)
+model.p = pyo.Var(range(horizon),range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
 
 
 model.d = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
@@ -81,8 +82,7 @@ model.cuc = pyo.Constraint(range(num_DU), range(num_UE),
                                 model.cu[rho,u] == sum(model.crb[rho,u,k] for k in range(num_RB)))
 
 model.lncsum = pyo.Var()
-###########
-model.lncsumc = pyo.Constraint(expr=model.lncsum == sum((model.cu[i,j]+0.01)for i in range(num_DU) for j in range(num_UE))/num_UE*num_DU)
+model.lncsumc = pyo.Constraint(expr=model.lncsum == sum(pyo.log(model.cu[i,j]+0.01)for i in range(num_DU) for j in range(num_UE))/num_UE*num_DU)
 
 # constraints
 model.numrbc = pyo.Constraint(range(num_DU), rule= lambda model,rho:
@@ -91,16 +91,16 @@ model.pminc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= 
     model.p[rho,u,k] == P_min)
 
 i=0
-demand = np.random.randint(low=1000, high=1500, size=(num_DU, num_UE))
+demand = np.random.randint(low=1000, high=1500, size=(horizon, num_DU, num_UE))
 print("alpha = ", i)
-model.demand = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
+model.demand = pyo.Var(range(horizon), range(num_DU), range(num_UE), domain=pyo.Reals)
 def demandc(model, rho, u):
     return model.demand[rho, u] == alpha[i] * demand[rho][u]
-model.demandc = pyo.Constraint(range(num_DU), range(num_UE), rule=demandc)
-model.demandsatisfy = pyo.Constraint(range(num_DU), range(num_UE), 
-                            rule=lambda model,rho,u: model.cu[rho,u]>=model.demand[rho,u])
+model.demandc = pyo.Constraint(range(horizon), range(num_DU), range(num_UE), rule=demandc)
+model.demandsatisfy = pyo.Constraint(range(horizon), range(num_DU), range(num_UE), 
+                            rule=lambda model,t,rho,u: model.cu[t,rho,u]>=model.demand[t,rho,u])
 model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
-opt = SolverFactory('ipopt')
+opt = SolverFactory('cplex')
 opt.options['max_iter'] = 3000
 result = opt.solve(model, tee=True) # time_limit=60
 
