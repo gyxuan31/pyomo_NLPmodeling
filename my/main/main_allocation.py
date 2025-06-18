@@ -12,9 +12,9 @@ np.set_printoptions(threshold=np.inf)
 
 def allocation(R):
     num_DU = 3
-    num_UE = 30
+    num_UE = 10
     total_UE = num_UE * num_DU
-    num_RB = 60 # num RB/DU
+    num_RB = 30 # num RB/DU
     B = 200*1e3 # bandwidth of 1 RB, kHz
     P_min = 0.3
     P_max = 0.6
@@ -29,7 +29,7 @@ def allocation(R):
     R = np.zeros((num_UE, predicted_len))
     for i in range(num_UE):
         for j in range(predicted_len):
-            R[i][j] = np.random.randint(low=100, high=150)
+            R[i][j] = np.random.randint(low=1, high=5)
     
     # Location
     locdux = np.zeros(num_DU) # initialize du location x
@@ -69,6 +69,7 @@ def allocation(R):
 
     model.crb = pyo.Var(range(num_UE), range(predicted_len), range(num_RB))
     def crbc(model,u,t,k):
+        ##########
         return model.crb[u,t,k] == B * model.e[u,t,k] * pyo.log(1+model.p[u,t,k]*model.d[u,k]/(model.I[u,t,k]+sigmsqr))
     model.crbc = pyo.Constraint(range(num_UE), range(predicted_len), range(num_RB), rule = crbc)
 
@@ -78,6 +79,7 @@ def allocation(R):
                                     model.cu[u,t] == sum(model.crb[u,t,k] for k in range(num_RB)))
 
     model.lnc = pyo.Var()
+    ###########
     model.lncc = pyo.Constraint(expr=model.lnc==sum(sum(pyo.log(model.cu[u,t]) for t in range(predicted_len))for u in range(num_UE)))
     # constraints
     model.numrbc = pyo.Constraint(expr=sum(sum(sum(model.e[u,t,k] for k in range(num_RB))for t in range(predicted_len))for u in range(num_UE)) <=num_RB)
@@ -97,6 +99,9 @@ def allocation(R):
     print('--------- Begin Solving ---------')
     opt = SolverFactory('ipopt')
     # opt.options['max_iter'] = 100
+    model.pprint()
+    # model.display()
+    print(opt.available()) 
     result = opt.solve(model, tee=True)
     for i in range(num_UE):
         for t in range(predicted_len):
