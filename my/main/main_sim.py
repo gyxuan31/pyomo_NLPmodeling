@@ -3,6 +3,7 @@ from scipy.optimize import minimize
 from statsmodels.tsa.arima_process import ArmaProcess
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogLocator
 import pyomo.environ as pyo
 from pyomo.opt import SolverFactory
 from pyomo.core.expr.numeric_expr import Expr_if
@@ -66,7 +67,7 @@ for t in range(T):
         locux[i] += dx * step_len
         locuy[i] += dy * step_len
 
-    trajectory_x[t, :] = locux
+    trajectory_x[t, :] = locux # location of every users at time t, shape(T, total_UE)
     trajectory_y[t, :] = locuy
 
 
@@ -81,13 +82,15 @@ for i in range(num_UE):
 record = [] # shape(T, 1) record data rate value
 for t in range(T):
     data_rate = np.ones(num_UE)*0.1
+    # update distance
     for i in range(num_UE): 
         temp = []
         for j in range(num_RU):
             temp.append(np.sqrt((trajectory_x[t][i]-locdux[j])**2+(trajectory_y[t][i]-locduy[j])**2))
         distance[i] = min(temp)
         user_RU[i] = temp.index(min(temp))
-
+        
+    # NORMAL
     for n in range(total_UE):
         for k in range(num_RB):
             if e[n][k] == 1:
@@ -101,8 +104,25 @@ for t in range(T):
                 SINR = signal / (interference + sigmsqr)
                 data_rate[n] += B * np.log(1 + SINR)
     record.append(sum(data_rate))
+    
+    model = pyo.ConcreteModel()
+    model.e = pyo.Var(range(predicted_len), range(num_UE), range(num_RB), domain=pyo.Reals)
+    
+    model.I = pyo.Var(range(predicted_len), range(num_UE), range(num_RB), domain=pyo.Reals)
+    def Ic(model,t,u,k):
+        return model.I[t,u,k] == \
+            sum(model.e[t,i,k]*P*(distance[i]**(-eta))*rayleigh_gain[i][k] for i in range(num_UE)) \
+                - model.e[t,u,k]*P*(distance[u]**(-eta))*rayleigh_gain[u][k]
+    model.Ic = pyo.Constraint(range(predicted_len), range(num_UE), range(num_RB), rule=Ic)
+    
+    model.cu = pyo.Var(range(num_UE))
+    
 print(record)
 plt.plot(record)
+ax = plt.gca()
+ax.set_yscale('log')
+ax.yaxis.set_major_locator(LogLocator(base=10.0))
+ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10)*0.1, numticks=12))
 plt.show()
 print("Data rate for each user (in bps):")
 print(data_rate)
