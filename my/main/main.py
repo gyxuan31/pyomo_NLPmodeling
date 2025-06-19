@@ -1,7 +1,7 @@
 import numpy as np
 from statsmodels.tsa.arima_process import ArmaProcess
 import matplotlib.pyplot as plt
-from main_lstm import predict, train
+from Optimization.my.main.main_lstm_req import predict, train
 from main_allocation import allocation
 
 T = 150 # total time slot

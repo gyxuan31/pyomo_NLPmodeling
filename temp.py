@@ -1,141 +1,130 @@
+from pyoptsparse import Optimization, OPT, SLSQP, pyALPSO
 import numpy as np
-import matplotlib.pyplot as plt
-import pyomo.environ as pyo
-from pyomo.opt import SolverFactory
-import sys
-np.random.seed(0)
-np.set_printoptions(threshold=np.inf)
 
-T = 100
+record = []
+T = 20
+num_RU = 3
+UERU = 30 # num of UE under every RU
+total_UE = UERU * num_RU
+user_RU = np.array([n // UERU for n in range(total_UE)]) # RU index
 
-num_UE = 10
-num_DU = 3
-num_RB = 30 # num RB/DU {60, 80, 100}
-B = 200*1e3 # bandwidth of 1 RB
-B_total = 12*1e6 # total bandwidth/DU
-P_min = 3
-P_max = 6
-sigmsqr = -173 # dBm
+num_RB = 20 # num RB/RU
+B = 200*1e3 # bandwidth of 1 RB, kHz
+P = 0.3
+sigmsqr = 10**((-173-30)/10)
 eta = 2
+# Location
+locrux = [-5,0,5] # initialize du location x
+locruy = [-5,0,5] # initialize du location y
+locux = np.random.randn(total_UE)*10 # initialize users location x
+locuy = np.random.randn(total_UE)*10 # initialize users location y
 
+signal = []
+c = np.zeros(total_UE) # data rate
+
+trajectory_x = np.zeros((T, total_UE))
+trajectory_y = np.zeros((T, total_UE))
+
+direction_map = {
+    0: (0, 1),   # up
+    1: (0, -1),  # down
+    2: (-1, 0),  # left
+    3: (1, 0)    # right
+}
+# pass the parameter
+predicted_len = 10
+R = np.zeros((total_UE, predicted_len))
+for i in range(total_UE):
+    for j in range(predicted_len):
+        R[i][j] = np.random.randint(low=1, high=5)
 # Rayleigh fading
-X = np.random.randn(num_DU, num_UE, num_RB) # real
-Y = np.random.randn(num_DU, num_UE, num_RB) # img
-H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (num_DU, num_UE, num_RB)
-rayleigh_amplitude = np.abs(H)     # |h| Rayleigh(sigma=sqrt(1/2))
-rayleigh_gain = np.abs(H)**2          # |h|^2 rayleigh_gain.shape = (num_DU, num_UE, num_RB)
-
-# UE locations
-locux = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location x
-locuy = np.random.randint(low=-10, high=10, size=(num_DU, num_UE)) # initialize users location y
-locdux = np.zeros(num_DU) # initialize du location x
-locduy = np.zeros(num_DU) # initialize du location y
-# plt.scatter(locdux[0], locduy[0], colorizer='red')
-# plt.scatter(locux[0], locuy[0], colorizer='blue')
-# plt.grid(True)
-# plt.show()
-
-e = np.zeros((num_DU, num_UE, num_RB))
-p = np.zeros((num_DU, num_UE, num_RB))
-
-demand = np.random.randint(low=0, high=3, size=(num_DU, num_UE))
-
-# Model
-model = pyo.ConcreteModel()
-model.e = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Binary)
-model.p = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
-
-model.demand = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
-def demandc(model, rho, u):
-    return model.demand[rho, u] == demand[rho][u]
-model.demandc = pyo.Constraint(range(num_DU), range(num_UE), rule=demandc)
-model.demandsatisfy = pyo.Constraint(range(num_DU), range(num_UE), 
-                                 rule=lambda model,rho,u: sum(model.e[rho,u,k]for k in range(num_RB))>=model.demand[rho,u])
-
-model.locux = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
-model.locuxc = pyo.Constraint(range(num_DU), range(num_UE), rule=lambda model,rho,u:
-    model.locux[rho,u] == locux[rho][u])
-model.locuy = pyo.Var(range(num_DU), range(num_UE), domain=pyo.Reals)
-model.locuyc = pyo.Constraint(range(num_DU), range(num_UE), rule=lambda model,rho,u:
-    model.locuy[rho,u] == locuy[rho][u])
-model.locdux = pyo.Var(range(num_DU), domain=pyo.Reals)
-model.locduxc = pyo.Constraint(range(num_DU), rule=lambda model,rho:
-    model.locdux[rho] == locdux[rho])
-model.locduy = pyo.Var(range(num_DU), domain=pyo.Reals)
-model.locduyc = pyo.Constraint(range(num_DU), rule=lambda model,rho:
-    model.locduy[rho] == locduy[rho])
-
-model.d = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
-def dc(model,rho,u,k):
-    return model.d[rho,u,k] == rayleigh_gain[rho][u][k]*\
-        pyo.sqrt((model.locux[rho,u]-model.locdux[rho])**2+(model.locuy[rho,u]-model.locduy[rho])**2+1e-6)**(-eta)
-model.dc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule=dc) # d = d*h
-
-model.I = pyo.Var(range(num_DU), range(num_UE), range(num_RB), domain=pyo.Reals)
-def Ic(model, rho, u, k):
-    return model.I[rho, u, k] == sum(model.e[i,j,k]*model.p[i,j,k]*model.d[i,j,k] for i in range(num_DU) for j in range(num_UE))\
-        - model.e[rho,u,k]*model.p[rho,u,k]*model.d[rho,u,k]
-model.Ic = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule=Ic)
-
-model.crb = pyo.Var(range(num_DU), range(num_UE), range(num_RB))
-def crbc(model,rho,u,k):
-    return model.crb[rho, u, k] == B * model.e[rho,u,k] * pyo.log(1+model.p[rho,u,k]*model.d[rho,u,k]/(model.I[rho,u,k]+sigmsqr))
-model.crbc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule = crbc)
-
-model.cu = pyo.Var(range(num_DU), range(num_UE))
-model.cuc = pyo.Constraint(range(num_DU), range(num_UE), 
-                             rule= lambda model,rho,u: 
-                                model.cu[rho,u] == sum(model.crb[rho,u,k] for k in range(num_RB)))
-
-# model.minc = pyo.Var(range(num_DU))
-# model.mincc = pyo.Constraint(range(num_DU), range(num_UE), rule= lambda model,rho,u: 
-#     model.minc[rho] <= model.cu[rho,u])
-
-model.lncsum = pyo.Var()
-model.lncsumc = pyo.Constraint(expr=model.lncsum==sum(pyo.log(model.cu[i,j])for i in range(num_DU) for j in range(num_UE)))
-
-# constraints
-model.numrbc = pyo.Constraint(range(num_DU), rule= lambda model,rho:
-    sum(sum(model.e[rho,u,k] for k in range(num_RB))for u in range(num_UE)) <=num_RB)
-model.pminc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= lambda model, rho, u, k:
-    model.p[rho,u,k] >= P_min)
-model.pmaxc = pyo.Constraint(range(num_DU), range(num_UE), range(num_RB), rule= lambda model, rho, u, k:
-    model.p[rho,u,k] <= P_max)
+X = np.random.randn(total_UE, num_RB) # real
+Y = np.random.randn(total_UE, num_RB) # img
+H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (total_UE, num_RB)
+rayleigh_gain = np.abs(H)**2          # |h|^2
 
 
-model.obj = pyo.Objective(expr=model.lncsum, sense=pyo.maximize)
-opt = SolverFactory('ipopt')
-# f = open('log.txt', 'w')
-# sys.stdout = f
-# model.pprint()
-# f.close()
-model.pprint()
-result = opt.solve(model, tee=True) # time_limit=60
-for i in range(num_UE):
-    for j in range(num_RB):
-        p[0,i,j] = pyo.value(model.p[0,i,j])
-        e[0,i,j] = pyo.value(model.e[0,i,j])
-model.obj.deactivate()
-del model.obj
-print("deactivate")
 
-# for rho in range(num_DU):
-#     print("num_DU:", rho)
-#     model.obj = pyo.Objective(expr=model.minc[rho], sense=pyo.maximize)
-#     opt = SolverFactory('mindtpy')
-#     # f = open('log.txt', 'w')
-#     # sys.stdout = f
-#     # model.pprint()
-#     # f.close()
 
-#     result = opt.solve(model, tee=True) # time_limit=60
-#     for i in range(num_UE):
-#         for j in range(num_RB):
-#             p[rho,i,j] = pyo.value(model.p[rho,i,j])
-#             e[rho,i,j] = pyo.value(model.e[rho,i,j])
-#     model.obj.deactivate()
-#     del model.obj
-#     print("deactivate")
+# Normal - Generate e
+rb_counts = np.random.randint(low=0, high=6, size=total_UE)
+e = np.zeros((total_UE, num_RB))
+for i in range(total_UE):
+    count = rb_counts[i]
+    selected_rbs = np.random.choice(num_RB, size=count, replace=False)
+    e[i, selected_rbs] = 1
 
-print(e)
-del model
+distance = np.zeros((T, total_UE)) 
+record = [] # shape(T, 1) record data rate value
+for t in range(T):
+    data_rate = np.ones(total_UE)*0.1
+    
+    # update distance
+    for i in range(total_UE): 
+        temp = []
+        for j in range(num_RU):
+            temp.append(np.sqrt((trajectory_x[t][i]-locrux[j])**2+(trajectory_y[t][i]-locruy[j])**2))
+        distance[t][i] = min(temp)
+        user_RU[i] = temp.index(min(temp))
+        ru = user_RU[i]
+# Generate true trajectory
+for t in range(T):
+    for i in range(total_UE):
+        direction = np.random.randint(0, 4)
+        dx, dy = direction_map[direction]
+        step_len = np.random.randn()
+
+        locux[i] += dx * step_len
+        locuy[i] += dy * step_len
+
+    trajectory_x[t, :] = locux # location of every users at time t, shape(T, total_UE)
+    trajectory_y[t, :] = locuy
+
+for t in range(20):
+    pre_distance = np.ones((predicted_len, total_UE))
+    for i in range(predicted_len):
+        for j in range(total_UE):
+            pre_distance[i][j] = distance[t+i][j]
+    def objfunc(xdict):
+        funcs = {}
+        e = xdict['e'].reshape((predicted_len, total_UE, num_RB))
+        I = np.zeros((predicted_len, total_UE, num_RB))
+        cu = np.zeros((predicted_len, total_UE))
+        
+        cons = [0]*predicted_len
+        for t in range(predicted_len):
+            cons[t] = np.sum(e[t, :, :])
+        funcs['con'] = cons
+        
+        for t in range(predicted_len):
+            for u in range(total_UE):
+                for k in range(num_RB):
+                    interference = 0
+                    for i in range(total_UE):
+                        if i != u:
+                            interference += e[t,i,k] * P * (pre_distance[t][i]**(-eta)) * rayleigh_gain[i][k]
+                    I[t,u,k] = interference
+
+                for k in range(num_RB):
+                    signal = P * (pre_distance[t][u]**(-eta)) * rayleigh_gain[u][k]
+                    cu[t,u] += e[t,u,k] * B * np.log(1 + signal / (I[t,u,k] + sigmsqr))
+
+        total_mean = np.sum(cu)
+        
+        
+        funcs['obj'] = -total_mean  # pyoptsparse minimizes, so negate
+        fail = False
+        return funcs, fail
+
+    n_vars = predicted_len * total_UE * num_RB
+    optProb = Optimization('RB Allocation', objfunc)
+    optProb.addVarGroup('e', n_vars, type='c', lower=0.0, upper=1.0, value=0)
+
+    optProb.addConGroup('con', predicted_len, lower=None, upper=num_RB, wrt='e', jac=None)
+
+    optProb.addObj('obj')
+    opt = OPT('ALPSO')
+    sol = opt(optProb, sens='FD')
+
+    e_opt = sol.getDVs()['e'].reshape((predicted_len, total_UE, num_RB))
+    print(sol)
