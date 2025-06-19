@@ -21,8 +21,9 @@ B = 200*1e3 # bandwidth of 1 RB, kHz
 P = 0.3
 sigmsqr = 10**((-173-30)/10)
 eta = 2
-
+gamma = 3 # reused ratio
 predicted_len = 5
+num_setreq = 3
 
 # function parameters
 # R = np.zeros((total_UE, predicted_len))
@@ -48,14 +49,6 @@ c = np.zeros(total_UE) # data rate
 trajectory_x = np.zeros((T, total_UE))
 trajectory_y = np.zeros((T, total_UE))
 
-
-direction_map = {
-    0: (0, 1),   # up
-    1: (0, -1),  # down
-    2: (-1, 0),  # left
-    3: (1, 0)    # right
-}
-
 # Generate true trajectory
 trajectory_x[0] = locux
 trajectory_y[0] = locuy
@@ -69,7 +62,7 @@ for t in range(T):
 # plt.show()
 
 # Generate distance
-distance = np.zeros((T, total_UE)) 
+distance = np.zeros((T, total_UE, num_RU)) 
 record_norm = [] # shape(T, 1) record data rate value
 record_op = []
 for t in range(T):
@@ -78,10 +71,10 @@ for t in range(T):
     for i in range(total_UE): 
         temp = []
         for j in range(num_RU):
-            temp.append(np.sqrt((trajectory_x[t][i]-locrux[j])**2+(trajectory_y[t][i]-locruy[j])**2))
-        distance[t][i] = min(temp)
+            dis = np.sqrt((trajectory_x[t][i]-locrux[j])**2+(trajectory_y[t][i]-locruy[j])**2)
+            distance[t][i][j] = dis
+            temp.append(dis)
         user_RU[i] = temp.index(min(temp))
-        ru = user_RU[i]
     #     plt.plot([float(trajectory_x[t][i]), float(locrux[ru])], [float(trajectory_y[t][i]), float(locruy[ru])], color='gray', linewidth=0.8)
     # plt.scatter(trajectory_x[t], trajectory_y[t])
     # plt.scatter(locrux, locruy)
@@ -102,29 +95,28 @@ for i in range(total_UE):
 #         if distance[t][j] == 0:
 #             print("0000000000000")
 
-for t in range(100):
+for t in range(1,11):
     # NORMAL
     data_rate = np.ones(total_UE)*0.1
     for n in range(total_UE):
         for k in range(num_RB):
             if e_norm[n][k] == 1:
-                signal = P * (distance[t][n] ** (-eta)) * rayleigh_gain[n][k]
+                signal = P * (distance[t][n][user_RU[n]] ** (-eta)) * rayleigh_gain[n][k]
                 interference = 0
-                for others in range(total_UE):
-                    if others != n and e_norm[others][k] == 1:
-                        if user_RU[others] != user_RU[n]: 
-                            interference += P * (distance[t][others] ** -eta) * rayleigh_gain[others][k]
+                for i in range(num_RU):
+                    if i != user_RU[n]:
+                        interference += P * (distance[t][n][i] ** (-eta)) * rayleigh_gain[n][k]
 
                 SINR = signal / (interference + sigmsqr)
                 data_rate[n] += B * np.log(1 + SINR)
     record_norm.append(sum(data_rate))
-    
             
     # OPT
-    pre_distance = np.ones((predicted_len, total_UE))
+    pre_distance = np.ones((predicted_len, total_UE, num_RU))
     for i in range(predicted_len):
         for j in range(total_UE):
-            pre_distance[i][j] = distance[t+i][j]
+            for k in range(num_RU):
+                pre_distance[i][j][k] = distance[t+i][j][k]
 
     print('Model Creating - t=', t)
     model = pyo.ConcreteModel()
@@ -133,13 +125,13 @@ for t in range(100):
             return 1
         else:
             return 0
-    model.e = pyo.Var(range(predicted_len), range(total_UE), range(num_RB), bounds=(0, 1), initialize=eini, domain=pyo.Binary)
+    model.e = pyo.Var(range(predicted_len), range(total_UE), range(num_RB), bounds=(0, 1),  domain=pyo.Binary) # initialize=eini,
     
     model.I = pyo.Var(range(predicted_len), range(total_UE), range(num_RB), initialize=0.01, domain=pyo.Reals)
     def Ic(model,t,u,k):
         return model.I[t,u,k] == \
-            sum(P*(pre_distance[t][i]**(-eta))*rayleigh_gain[i][k] for i in range(total_UE)) \
-                - model.e[t,u,k]*P*(pre_distance[t][u]**(-eta))*rayleigh_gain[u][k]
+            sum(sum(model.e[t,i,k]*P*(pre_distance[t][i][j]**(-eta))*rayleigh_gain[i][k]for j in range(num_RU)) for i in range(total_UE)) \
+                - model.e[t,u,k]*P*(pre_distance[t][u][user_RU[u]]**(-eta))*rayleigh_gain[u][k]
     # def Ic(model,t,u,k):
     #     return model.I[t,u,k] == Expr_if(
     #         IF = model.e[t,u,k] >= 0.5,
@@ -154,12 +146,12 @@ for t in range(100):
     #     return model.cu[t,u] == sum(
     #         Expr_if(
     #             IF= model.e[t,u,k] >= 0.5,
-    #             THEN = B*log(1+P*(pre_distance[t][u]**(-eta))*rayleigh_gain[u][k]/(model.I[t,u,k]+sigmsqr)),
+    #             THEN = B*log(1+P*(pre_distance[t][u][user_RU[u]]**(-eta))*rayleigh_gain[u][k]/(model.I[t,u,k]+sigmsqr)),
     #             ELSE= 0)
     #         for k in range(num_RB)
     #         )
     def cuc(model,t,u):
-        return model.cu[t,u] == sum(model.e[t,u,k]*B*log(1+P*(pre_distance[t][u]**-eta)*rayleigh_gain[u][k]/(model.I[t,u,k]+sigmsqr)) for k in range(num_RB))
+        return model.cu[t,u] == sum(model.e[t,u,k]*B*log(1+P*(pre_distance[t][u][user_RU[u]]**-eta)*rayleigh_gain[u][k]/(model.I[t,u,k]+sigmsqr)) for k in range(num_RB))
     model.cuc = pyo.Constraint(range(predicted_len), range(total_UE), rule=cuc)
     
     model.mean = pyo.Var()
@@ -167,17 +159,20 @@ for t in range(100):
                                  sum(sum(model.cu[t,u] for u in range(total_UE))for t in range(predicted_len)))
     
     # Constraint
-    model.rbc = pyo.Constraint(range(predicted_len), rule= lambda model, t:sum(sum(model.e[t,u,k]for k in range(num_RB)) for u in range(total_UE)) <= num_RB*num_RU)
+    model.rbc = pyo.Constraint(range(predicted_len), rule= lambda model, t:sum(sum(model.e[t,u,k]for k in range(num_RB)) for u in range(total_UE)) <= num_RB*gamma)
+    
     def reqc(model,t,u):
-        return sum(model.e[t,u,k] for k in range(num_RB)) >=rb_counts[u]
-    model.req = pyo.Constraint(range(predicted_len), range(total_UE), rule=reqc)
+        return sum(model.e[t,u,k] for k in range(num_RB)) >= rb_counts[u]
+    model.req = pyo.Constraint(range(predicted_len), range(num_setreq), rule=reqc)
+    
     model.obj = pyo.Objective(expr = -model.mean, sense = pyo.minimize)
-    # opt = SolverFactory('ipopt')
-    opt = SolverFactory('mindtpy')
-    # opt.options['max_iter'] = 100
-    # opt.options['acceptable_iter'] = 200
-    # opt.options['acceptable_tol'] = 1e-2
-    # opt.options['acceptable_constr_viol_tol'] = 1e-2
+    
+    opt = SolverFactory('ipopt')
+    opt.options['max_iter'] = 500
+    opt.options['acceptable_iter'] = 200
+    opt.options['acceptable_tol'] = 1e-2
+    opt.options['acceptable_constr_viol_tol'] = 1e-2
+    # opt = SolverFactory('mindtpy')
     result = opt.solve(model, tee=True)
     
     # record_op.append(pyo.value(model.mean)) # (1/total_UE)*
@@ -193,13 +188,12 @@ for t in range(100):
     for n in range(total_UE):
         for k in range(num_RB):
             if e_op[0][n][k] >= 0.5:
-                signal = P * (distance[t][n] ** (-eta)) * rayleigh_gain[n][k]
+                signal = P * (distance[t][n][user_RU[n]] ** (-eta)) * rayleigh_gain[n][k]
                 interference = 0
-                for others in range(total_UE):
-                    if others != n and e_op[0][others][k] >= 0.5:
-                        if user_RU[others] != user_RU[n]: 
-                            interference += P * (distance[t][others] ** -eta) * rayleigh_gain[others][k]
-
+                for i in range(num_RU):
+                    if i != user_RU[n]:
+                        interference += P * (distance[t][n][i] ** -eta) * rayleigh_gain[n][k]
+            
                 SINR = signal / (interference + sigmsqr)
                 data_rate_op[n] += B * np.log(1 + SINR)
     record_op.append(sum(data_rate_op))
@@ -214,6 +208,7 @@ plt.plot(record_op)
 plt.ylim(0, None)
 plt.xlabel('time step')
 plt.ylabel('data rate')
+plt.legend(loc='upper right')
 plt.grid()
 # plt.yscale("log")
 plt.show()
