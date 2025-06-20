@@ -46,6 +46,7 @@ for t = 1:T
     end
 end
 
+% NORMAL
 rb_counts = randi([0, 5], 1, total_UE); % initial allocation
 e_norm = zeros(total_UE, num_RB);
 
