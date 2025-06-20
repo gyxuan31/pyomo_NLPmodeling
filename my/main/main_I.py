@@ -14,14 +14,14 @@ T = 100
 num_RU = 3
 UERU = 5 # num of UE under every RU
 total_UE = UERU * num_RU
-user_RU = np.array([n // UERU for n in range(total_UE)]) # RU index
+user_RU = np.array([n // UERU for n in range(total_UE)]) # closest RU index
 
 num_RB = 20 # num RB/RU
 B = 200*1e3 # bandwidth of 1 RB, kHz
 P = 0.3
 sigmsqr = 10**((-173-30)/10)
 eta = 2
-gamma = 3 # reused ratio
+gamma = 1 # reused ratio
 predicted_len = 5
 num_setreq = 3
 
@@ -35,7 +35,7 @@ num_setreq = 3
 X = np.random.randn(total_UE, num_RB) # real
 Y = np.random.randn(total_UE, num_RB) # img
 H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (total_UE, num_RB)
-rayleigh_gain = np.ones((total_UE, num_RB))     # |h|^2
+rayleigh_gain = np.abs(H)**2     # |h|^2
 
 # Location
 locrux = [-5,0,5] # initialize du location x
@@ -96,23 +96,26 @@ for i in range(total_UE):
 #             print("0000000000000")
 
 for t in range(1,11):
-    # NORMAL
-    data_rate = np.ones(total_UE)*0.1
+    
+    # RANDOMLY ALLOCATE
+    data_rate = np.zeros(total_UE)
     for n in range(total_UE):
         for k in range(num_RB):
             if e_norm[n][k] == 1:
                 signal = P * (distance[t][n][user_RU[n]] ** (-eta)) * rayleigh_gain[n][k]
                 interference = 0
-                for i in range(num_RU):
-                    if i != user_RU[n]:
-                        interference += P * (distance[t][n][i] ** (-eta)) * rayleigh_gain[n][k]
+                for others in range(total_UE):
+                    if e_norm[others][k] == 1: # share the same RB
+                        if user_RU[others] != user_RU[n]:
+                            interference += P * (distance[t][n][user_RU[others]] ** (-eta)) * rayleigh_gain[n][k]
 
                 SINR = signal / (interference + sigmsqr)
                 data_rate[n] += B * np.log(1 + SINR)
-    record_norm.append(sum(data_rate))
+    record_norm.append(sum(np.log(1+data_rate)))
+    
             
     # OPT
-    pre_distance = np.ones((predicted_len, total_UE, num_RU))
+    pre_distance = np.ones((predicted_len, total_UE, num_RU)) # predicted distance
     for i in range(predicted_len):
         for j in range(total_UE):
             for k in range(num_RU):
@@ -120,17 +123,17 @@ for t in range(1,11):
 
     print('Model Creating - t=', t)
     model = pyo.ConcreteModel()
-    def eini(model,t,u,k):
-        if e_norm[u][k] == 1:
-            return 1
-        else:
-            return 0
+    # def eini(model,t,u,k):
+    #     if e_norm[u][k] == 1:
+    #         return 1
+    #     else:
+    #         return 0
     model.e = pyo.Var(range(predicted_len), range(total_UE), range(num_RB), bounds=(0, 1),  domain=pyo.Binary) # initialize=eini,
     
     model.I = pyo.Var(range(predicted_len), range(total_UE), range(num_RB), initialize=0.01, domain=pyo.Reals)
     def Ic(model,t,u,k):
         return model.I[t,u,k] == \
-            sum(sum(model.e[t,i,k]*P*(pre_distance[t][i][j]**(-eta))*rayleigh_gain[i][k]for j in range(num_RU)) for i in range(total_UE)) \
+            sum(model.e[t,others,k]*P*(pre_distance[t][u][user_RU[others]]**(-eta))*rayleigh_gain[u][k] for others in range(total_UE)) \
                 - model.e[t,u,k]*P*(pre_distance[t][u][user_RU[u]]**(-eta))*rayleigh_gain[u][k]
     # def Ic(model,t,u,k):
     #     return model.I[t,u,k] == Expr_if(
@@ -156,11 +159,12 @@ for t in range(1,11):
     
     model.mean = pyo.Var()
     model.meanc = pyo.Constraint(expr=model.mean==\
-                                 sum(sum(model.cu[t,u] for u in range(total_UE))for t in range(predicted_len)))
+                                 sum(sum(log(1+model.cu[t,u]) for u in range(total_UE))for t in range(predicted_len)))
     
     # Constraint
+    # RB limit
     model.rbc = pyo.Constraint(range(predicted_len), rule= lambda model, t:sum(sum(model.e[t,u,k]for k in range(num_RB)) for u in range(total_UE)) <= num_RB*gamma)
-    
+    # num=num_setreq requirement
     def reqc(model,t,u):
         return sum(model.e[t,u,k] for k in range(num_RB)) >= rb_counts[u]
     model.req = pyo.Constraint(range(predicted_len), range(num_setreq), rule=reqc)
@@ -177,26 +181,26 @@ for t in range(1,11):
     
     # record_op.append(pyo.value(model.mean)) # (1/total_UE)*
     e_op = np.ones((predicted_len, total_UE, num_RB))
-    count = 0
+
     for i in range(predicted_len):
         for j in range(total_UE):
             for k in range(num_RB):
                 e_op[i][j][k] = pyo.value(model.e[i,j,k])
-                count+=e_op[i][j][k]
-                
-    data_rate_op = np.ones(total_UE)*0.1
+    print(e_op)
+    data_rate_op = np.zeros(total_UE)
     for n in range(total_UE):
         for k in range(num_RB):
             if e_op[0][n][k] >= 0.5:
                 signal = P * (distance[t][n][user_RU[n]] ** (-eta)) * rayleigh_gain[n][k]
                 interference = 0
-                for i in range(num_RU):
-                    if i != user_RU[n]:
-                        interference += P * (distance[t][n][i] ** -eta) * rayleigh_gain[n][k]
-            
+                for others in range(total_UE):
+                    if e_op[others][k] >= 0.5: # share the same RB
+                        if user_RU[others] != user_RU[n]:
+                            interference += P * (distance[t][n][user_RU[others]] ** (-eta)) * rayleigh_gain[n][k]
+
                 SINR = signal / (interference + sigmsqr)
                 data_rate_op[n] += B * np.log(1 + SINR)
-    record_op.append(sum(data_rate_op))
+    record_op.append(sum(np.log(1+data_rate_op)))
 
     print(record_op)
     print(record_norm)
