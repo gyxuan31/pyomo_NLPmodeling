@@ -1,9 +1,9 @@
 function [c, ceq] = constraints(e)
     global predicted_len total_UE num_RB 
-    gamma = 1; % reused ratio
+    gamma = 3; % reused ratio
     num_setreq = 3;
 
-    E = reshape(round(e), predicted_len, total_UE, num_RB);
+    E = reshape(e, predicted_len, total_UE, num_RB);
     c = zeros(predicted_len, 1); % <=0
     for t = 1:predicted_len
         e_sum = 0;

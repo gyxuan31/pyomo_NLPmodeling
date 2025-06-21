@@ -123,13 +123,13 @@ for t = 1:10
 
     % OP
     pre_distance = distance(t:t+predicted_len-1, :, :);
-    % fitnessFcn = @(e) -compute_total_rate(round(e), predicted_len, total_UE, num_RB, pre_distance, rayleigh_gain, P, sigmsqr, eta, B, T, user_RU, num_RU);
-    % options = optimoptions('ga', 'PopulationSize', 40, 'MaxGenerations', 50, 'Display', 'iter');
-    % [e_opt, fval] = ga(fitnessFcn, nvars, [], [], [], [], lb, ub, @constraints, options);
-    fmin = @(e) -compute_total_rate(e, predicted_len, total_UE, num_RB, pre_distance, rayleigh_gain, P, sigmsqr, eta, B, T, user_RU, num_RU);
-    options = optimoptions('fmincon', 'MaxIterations', 100, 'Display', 'iter-detailed', 'MaxFunctionEvaluations', 1e5);
-    [e_opt, fval] = fmincon(fmin, repmat(e_norm, predicted_len, 1, 1), [], [], [], [], lb, ub, @constraints, options);
-
+    fitnessFcn = @(e) -compute_total_rate(round(e), predicted_len, total_UE, num_RB, pre_distance, rayleigh_gain, P, sigmsqr, eta, B, T, user_RU, num_RU);
+    options = optimoptions('ga', 'PopulationSize', 40, 'MaxGenerations', 50, 'Display', 'iter');
+    [e_opt, fval] = ga(fitnessFcn, nvars, [], [], [], [], lb, ub, @constraints, options);
+    % fmin = @(e) -compute_total_rate(e, predicted_len, total_UE, num_RB, pre_distance, rayleigh_gain, P, sigmsqr, eta, B, T, user_RU, num_RU);
+    % options = optimoptions('fmincon', 'MaxIterations', 100, 'Display', 'iter-detailed', 'MaxFunctionEvaluations', 1e5,'Algorithm','interior-point');
+    % [e_opt, fval] = fmincon(fmin, zeros(1,nvars), [], [], [], [], lb, ub, @constraints, options); % repmat(e_norm, predicted_len, 1, 1)
+    % 
 
     for i = 1: nvars
         if e_opt(i) >= 0.5
