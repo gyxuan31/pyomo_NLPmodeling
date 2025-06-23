@@ -1,130 +1,126 @@
-from pyoptsparse import Optimization, OPT, SLSQP, pyALPSO
 import numpy as np
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler
 
-record = []
-T = 20
+np.random.seed(0)
+
+sequence_length = 100 
+num_ref = 5
+predicted_len = 3
+total_UE = 10
 num_RU = 3
-UERU = 30 # num of UE under every RU
-total_UE = UERU * num_RU
-user_RU = np.array([n // UERU for n in range(total_UE)]) # RU index
 
-num_RB = 20 # num RB/RU
-B = 200*1e3 # bandwidth of 1 RB, kHz
-P = 0.3
-sigmsqr = 10**((-173-30)/10)
-eta = 2
 # Location
-locrux = [-5,0,5] # initialize du location x
-locruy = [-5,0,5] # initialize du location y
-locux = np.random.randn(total_UE)*10 # initialize users location x
-locuy = np.random.randn(total_UE)*10 # initialize users location y
+locrux = [-5, 0, 5]
+locruy = [-5, 0, 5]
+locux = np.random.randn(total_UE) * 20 - 10
+locuy = np.random.randn(total_UE) * 20 - 10
 
-signal = []
-c = np.zeros(total_UE) # data rate
+trajectory_x = np.zeros((sequence_length, total_UE)) # shape(sequence_length, total_UE)
+trajectory_y = np.zeros((sequence_length, total_UE))
 
-trajectory_x = np.zeros((T, total_UE))
-trajectory_y = np.zeros((T, total_UE))
-
-direction_map = {
-    0: (0, 1),   # up
-    1: (0, -1),  # down
-    2: (-1, 0),  # left
-    3: (1, 0)    # right
-}
-# pass the parameter
-predicted_len = 10
-R = np.zeros((total_UE, predicted_len))
-for i in range(total_UE):
-    for j in range(predicted_len):
-        R[i][j] = np.random.randint(low=1, high=5)
-# Rayleigh fading
-X = np.random.randn(total_UE, num_RB) # real
-Y = np.random.randn(total_UE, num_RB) # img
-H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (total_UE, num_RB)
-rayleigh_gain = np.abs(H)**2          # |h|^2
-
-
-
-
-# Normal - Generate e
-rb_counts = np.random.randint(low=0, high=6, size=total_UE)
-e = np.zeros((total_UE, num_RB))
-for i in range(total_UE):
-    count = rb_counts[i]
-    selected_rbs = np.random.choice(num_RB, size=count, replace=False)
-    e[i, selected_rbs] = 1
-
-distance = np.zeros((T, total_UE)) 
-record = [] # shape(T, 1) record data rate value
-for t in range(T):
-    data_rate = np.ones(total_UE)*0.1
-    
-    # update distance
-    for i in range(total_UE): 
-        temp = []
-        for j in range(num_RU):
-            temp.append(np.sqrt((trajectory_x[t][i]-locrux[j])**2+(trajectory_y[t][i]-locruy[j])**2))
-        distance[t][i] = min(temp)
-        user_RU[i] = temp.index(min(temp))
-        ru = user_RU[i]
-# Generate true trajectory
-for t in range(T):
+# Trajectory
+trajectory_x[0] = locux
+trajectory_y[0] = locuy
+for t in range(1, sequence_length):
     for i in range(total_UE):
-        direction = np.random.randint(0, 4)
-        dx, dy = direction_map[direction]
-        step_len = np.random.randn()
+        move_x = np.random.uniform(-1, 1)
+        move_y = np.random.uniform(-1, 1)
+        trajectory_x[t, i] = trajectory_x[t - 1, i] + move_x
+        trajectory_y[t, i] = trajectory_y[t - 1, i] + move_y
 
-        locux[i] += dx * step_len
-        locuy[i] += dy * step_len
+# Distance
+distance = np.zeros((sequence_length, total_UE, num_RU))
+for t in range(sequence_length):
+    for i in range(total_UE):
+        for j in range(num_RU):
+            dis = np.sqrt((trajectory_x[t, i] - locrux[j]) ** 2 + (trajectory_y[t, i] - locruy[j]) ** 2)
+            distance[t, i, j] = dis
 
-    trajectory_x[t, :] = locux # location of every users at time t, shape(T, total_UE)
-    trajectory_y[t, :] = locuy
+X = []
+Y = []
+for i in range(sequence_length - num_ref - predicted_len):
+    x_seq = distance[i:i + num_ref, :, :]  # (num_ref, total_UE, num_RU)
+    y_seq = distance[i + num_ref:i + num_ref + predicted_len, :, :]  # (predicted_len, total_UE, num_RU)
+    X.append(x_seq)
+    Y.append(y_seq)
 
-for t in range(20):
-    pre_distance = np.ones((predicted_len, total_UE))
-    for i in range(predicted_len):
-        for j in range(total_UE):
-            pre_distance[i][j] = distance[t+i][j]
-    def objfunc(xdict):
-        funcs = {}
-        e = xdict['e'].reshape((predicted_len, total_UE, num_RB))
-        I = np.zeros((predicted_len, total_UE, num_RB))
-        cu = np.zeros((predicted_len, total_UE))
-        
-        cons = [0]*predicted_len
-        for t in range(predicted_len):
-            cons[t] = np.sum(e[t, :, :])
-        funcs['con'] = cons
-        
-        for t in range(predicted_len):
-            for u in range(total_UE):
-                for k in range(num_RB):
-                    interference = 0
-                    for i in range(total_UE):
-                        if i != u:
-                            interference += e[t,i,k] * P * (pre_distance[t][i]**(-eta)) * rayleigh_gain[i][k]
-                    I[t,u,k] = interference
+X = np.array(X)  # (samples, num_ref, total_UE, num_RU)
+Y = np.array(Y)  # (samples, predicted_len, total_UE, num_RU)
 
-                for k in range(num_RB):
-                    signal = P * (pre_distance[t][u]**(-eta)) * rayleigh_gain[u][k]
-                    cu[t,u] += e[t,u,k] * B * np.log(1 + signal / (I[t,u,k] + sigmsqr))
+scaler_x = MinMaxScaler()
+scaler_y = MinMaxScaler()
 
-        total_mean = np.sum(cu)
-        
-        
-        funcs['obj'] = -total_mean  # pyoptsparse minimizes, so negate
-        fail = False
-        return funcs, fail
+samples = X.shape[0]
+X_flat = X.reshape(-1, total_UE * num_RU) # shape(-1, total_UE*num_RU) - normalize
+X_scaled = scaler_x.fit_transform(X_flat).reshape(samples, num_ref, total_UE, num_RU)
 
-    n_vars = predicted_len * total_UE * num_RB
-    optProb = Optimization('RB Allocation', objfunc)
-    optProb.addVarGroup('e', n_vars, type='c', lower=0.0, upper=1.0, value=0)
+Y_flat = Y.reshape(-1, total_UE * num_RU)
+Y_scaled = scaler_y.fit_transform(Y_flat).reshape(samples, predicted_len, total_UE, num_RU)
 
-    optProb.addConGroup('con', predicted_len, lower=None, upper=num_RB, wrt='e', jac=None)
+X_train = torch.tensor(X_scaled, dtype=torch.float32)
+Y_train = torch.tensor(Y_scaled, dtype=torch.float32)
 
-    optProb.addObj('obj')
-    opt = OPT('ALPSO')
-    sol = opt(optProb, sens='FD')
+class LSTMModel(nn.Module):
+    def __init__(self, total_UE, num_RU, num_ref, predicted_len):
+        super().__init__()
+        hidden_dim = 64
+        self.lstm = nn.LSTM(input_size=total_UE*num_RU, hidden_size=hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, total_UE * num_RU * predicted_len)
+        self.total_UE = total_UE
+        self.num_RU = num_RU
+        self.num_ref = num_ref
+        self.predicted_len = predicted_len
 
-    e_opt = sol.getDVs()['e'].reshape((predicted_len, total_UE, num_RB))
-    print(sol)
+    def forward(self, x):
+        batch_size = x.size(0)
+        x = x.view(batch_size, self.num_ref, -1)  # (batch, num_ref, total_UE*num_RU)
+        lstm_out, _ = self.lstm(x)               # (batch, num_ref, hidden_dim)
+        last_out = lstm_out[:, -1, :]            # (batch, hidden_dim)
+        y = self.fc(last_out)                    # (batch, total_UE*num_RU*predicted_len)
+        y = y.view(batch_size, self.predicted_len, self.total_UE, self.num_RU)
+        return y
+
+
+model = LSTMModel(total_UE, num_RU, num_ref, predicted_len)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+loss_fn = nn.MSELoss()
+
+for epoch in range(300):
+    model.train()
+    output = model(X_train)
+    loss = loss_fn(output, Y_train)
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    if epoch % 20 == 0:
+        print(f"Epoch {epoch}, Loss = {loss.item():.4f}")
+
+
+model.eval()
+test_distance = distance[:num_ref + predicted_len, :, :]
+
+
+x_input = test_distance[:num_ref].reshape(1, num_ref, total_UE, num_RU)
+x_input_scaled = scaler_x.transform(x_input.reshape(-1, total_UE * num_RU)).reshape(1, num_ref, total_UE, num_RU)
+x_tensor = torch.tensor(x_input_scaled, dtype=torch.float32)
+
+with torch.no_grad():
+    y_pred_scaled = model(x_tensor).numpy()  # (1, predicted_len, total_UE, num_RU)
+    y_pred_flat = y_pred_scaled.reshape(-1, total_UE * num_RU)
+    y_pred = scaler_y.inverse_transform(y_pred_flat).reshape(predicted_len, total_UE, num_RU)
+
+
+plt.figure(figsize=(10, 4))
+true_future = test_distance[num_ref:num_ref + predicted_len, :, :]
+plt.plot(true_future.flatten(), 'r--', label='True Future Distance')
+plt.plot(y_pred.flatten(), 'b', label='Predicted Distance')
+plt.ylabel("Distance Value")
+plt.legend()
+plt.grid()
+plt.tight_layout()
+plt.show()
