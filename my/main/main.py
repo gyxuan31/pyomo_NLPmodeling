@@ -6,11 +6,29 @@ from sklearn.preprocessing import MinMaxScaler
 from scipy.io import savemat
 np.random.seed(0)
 
-T = 105
+T = 25
 num_ref = 5
 predicted_len = 3
-total_UE = 30
 num_RU = 3
+UERU = 5 # num of UE under every RU
+total_UE = UERU * num_RU
+num_RB = 20 # num RB/RU
+
+gamma = 3
+num_setreq = 3
+
+B = 200*1000
+P = 0.3
+sigmsqr = 10**((-173 - 30)/10)
+eta = 2
+predicted_len = 3
+
+# Rayleigh fading
+X = np.random.randn(total_UE, num_RB) # real
+Y = np.random.randn(total_UE, num_RB) # img
+H = (X + 1j * Y) / np.sqrt(2)   # H.shape = (total_UE, num_RB)
+# rayleigh_gain = np.abs(H)**2     # |h|^2
+rayleigh_gain = np.ones((total_UE, num_RB))
 
 # Location
 locrux = [-5, 0, 5]
@@ -125,8 +143,25 @@ for t in range(T-num_ref):
         pred = scaler_y.inverse_transform(pred_flat).reshape(predicted_len, total_UE, num_RU)
         prediction.append(pred)
 
-savemat('distance_true.mat', {'distance_true': distance_true}) # (T, total_UE, num_RU)
-savemat('prediction.mat', {'prediction':prediction}) # shape(T-num_ref, predicted_len, total_UE, num_RU)
+savemat('parameter.mat', {
+    'T': T,
+    'num_RU': num_RU,
+    'UERU': UERU,
+    'total_UE': total_UE,
+    'num_RB': num_RB,
+    'num_ref': num_ref,
+    'gamma': gamma,
+    'num_setreq': num_setreq,
+    'B': B,
+    'P': P,
+    'sigmsqr': sigmsqr,
+    'eta': eta,
+    'predicted_len': predicted_len,
+    'rayleigh_gain': rayleigh_gain,
+    
+    'distance_true': distance_true,  # (T, total_UE, num_RU)
+    'prediction':prediction # shape(T-num_ref, predicted_len, total_UE, num_RU)
+    })
 
 plt.figure(figsize=(10, 4))
 true_future = ref[num_ref:num_ref + predicted_len, :, :]
