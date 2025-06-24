@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
-
+from scipy.io import savemat
 np.random.seed(0)
 
 sequence_length = 100 
@@ -15,8 +15,8 @@ num_RU = 3
 # Location
 locrux = [-5, 0, 5]
 locruy = [-5, 0, 5]
-locux = np.random.randn(total_UE) * 20 - 10
-locuy = np.random.randn(total_UE) * 20 - 10
+locux = np.random.randn(total_UE) * 10 - 5
+locuy = np.random.randn(total_UE) * 10 - 5
 
 trajectory_x = np.zeros((sequence_length, total_UE)) # shape(sequence_length, total_UE)
 trajectory_y = np.zeros((sequence_length, total_UE))
@@ -30,6 +30,14 @@ for t in range(1, sequence_length):
         move_y = np.random.uniform(-1, 1)
         trajectory_x[t, i] = trajectory_x[t - 1, i] + move_x
         trajectory_y[t, i] = trajectory_y[t - 1, i] + move_y
+        
+# Plot trajectory
+# for i in range(total_UE):
+#     plt.plot(trajectory_x.T[i], trajectory_y.T[i])
+# plt.scatter(locrux, locruy)
+# plt.title('UE Trajectory')
+# plt.grid()
+# plt.show()
 
 # Distance
 distance = np.zeros((sequence_length, total_UE, num_RU))
@@ -39,6 +47,7 @@ for t in range(sequence_length):
             dis = np.sqrt((trajectory_x[t, i] - locrux[j]) ** 2 + (trajectory_y[t, i] - locruy[j]) ** 2)
             distance[t, i, j] = dis
 
+# Train
 X = []
 Y = []
 for i in range(sequence_length - num_ref - predicted_len):
@@ -104,16 +113,18 @@ for epoch in range(300):
 model.eval()
 test_distance = distance[:num_ref + predicted_len, :, :]
 
+# Predict
+for t in range(sequence_length):
+    x_input = test_distance[:num_ref].reshape(1, num_ref, total_UE, num_RU)
+    x_input_scaled = scaler_x.transform(x_input.reshape(-1, total_UE * num_RU)).reshape(1, num_ref, total_UE, num_RU)
+    x_tensor = torch.tensor(x_input_scaled, dtype=torch.float32)
 
-x_input = test_distance[:num_ref].reshape(1, num_ref, total_UE, num_RU)
-x_input_scaled = scaler_x.transform(x_input.reshape(-1, total_UE * num_RU)).reshape(1, num_ref, total_UE, num_RU)
-x_tensor = torch.tensor(x_input_scaled, dtype=torch.float32)
+    with torch.no_grad():
+        y_pred_scaled = model(x_tensor).numpy()  # (1, predicted_len, total_UE, num_RU)
+        y_pred_flat = y_pred_scaled.reshape(-1, total_UE * num_RU)
+        y_pred = scaler_y.inverse_transform(y_pred_flat).reshape(predicted_len, total_UE, num_RU)
 
-with torch.no_grad():
-    y_pred_scaled = model(x_tensor).numpy()  # (1, predicted_len, total_UE, num_RU)
-    y_pred_flat = y_pred_scaled.reshape(-1, total_UE * num_RU)
-    y_pred = scaler_y.inverse_transform(y_pred_flat).reshape(predicted_len, total_UE, num_RU)
-
+savemat('distance.mat', {'distance': distance})
 
 plt.figure(figsize=(10, 4))
 true_future = test_distance[num_ref:num_ref + predicted_len, :, :]
