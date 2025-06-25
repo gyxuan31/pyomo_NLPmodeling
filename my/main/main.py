@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 from scipy.io import savemat
-np.random.seed(0)
+np.random.seed(1)
 
 T = 25
 num_ref = 5
@@ -12,7 +12,7 @@ predicted_len = 3
 num_RU = 3
 UERU = 5 # num of UE under every RU
 total_UE = UERU * num_RU
-num_RB = 20 # num RB/RU
+num_RB = 30 # num RB/RU
 
 gamma = 3
 num_setreq = 3
@@ -35,7 +35,9 @@ locrux = [-5, 0, 5]
 locruy = [-5, 0, 5]
 locux = np.random.randn(total_UE) * 10 - 5
 locuy = np.random.randn(total_UE) * 10 - 5
-
+# plt.scatter(locrux,locruy)
+# plt.scatter(locux,locuy)
+# plt.show()
 trajectory_x = np.zeros((T, total_UE)) # shape(sequence_length, total_UE)
 trajectory_y = np.zeros((T, total_UE))
 
@@ -70,7 +72,7 @@ X = []
 Y = []
 for i in range(T - num_ref - predicted_len):
     x_seq = distance_true[i:i + num_ref, :, :]  # (num_ref, total_UE, num_RU)
-    y_seq = distance_true[i + num_ref:i + num_ref + predicted_len, :, :]  # (predicted_len, total_UE, num_RU)
+    y_seq = distance_true[i+num_ref:i + num_ref + predicted_len, :, :]  # (predicted_len, total_UE, num_RU)
     X.append(x_seq)
     Y.append(y_seq)
 
@@ -163,11 +165,22 @@ savemat('parameter.mat', {
     'prediction':prediction # shape(T-num_ref, predicted_len, total_UE, num_RU)
     })
 
-plt.figure(figsize=(10, 4))
-true_future = ref[num_ref:num_ref + predicted_len, :, :]
-plt.plot(true_future.flatten(), 'r--', label='True Future Distance')
-plt.plot(pred.flatten(), 'b', label='Predicted Distance')
-plt.ylabel("Distance Value")
+print(distance_true)
+print(prediction)
+
+plt.figure()
+true_distance = distance_true[num_ref:num_ref + (T - num_ref - predicted_len + 1),1,1]  # (T - num_ref - predicted_len + 1,)
+plt.plot(true_distance.flatten(), 'r--', label='True Distance')
+pred_array = np.array(prediction)  # shape: (T - num_ref, predicted_len, total_UE, num_RU)
+pred_distance = []
+for i in range(pred_array.shape[0] - predicted_len + 1):
+    pred_distance.append(pred_array[i, 0, 1,1])
+
+plt.plot(pred_distance, 'b', label='Predicted Distance')
+plt.xlabel("Time Step")
+plt.ylabel("Distance")
+plt.xticks(np.arange(0, len(true_distance)+1, 3))
+plt.title("True vs Predicted Distance")
 plt.legend()
 plt.grid()
 plt.tight_layout()
