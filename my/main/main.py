@@ -66,7 +66,7 @@ for t in range(T):
         for j in range(num_RU):
             dis = np.sqrt((trajectory_x[t, i] - locrux[j]) ** 2 + (trajectory_y[t, i] - locruy[j]) ** 2)
             distance_true[t, i, j] = dis
-
+            
 # Train
 X = []
 Y = []
@@ -144,6 +144,74 @@ for t in range(T-num_ref):
         pred_flat = pred_scaled.reshape(-1, total_UE * num_RU)
         pred = scaler_y.inverse_transform(pred_flat).reshape(predicted_len, total_UE, num_RU)
         prediction.append(pred)
+
+# # MULTI - trajectory & distance
+# multi_num_UE = [5, 10, 20, 30, 40, 50, 60]
+# multi_distance_true = [] # shape(len(multi_num_UE), num_ref+predicted_len, multi_num_UE[i]), different shape
+# for i in range(len(multi_num_UE)):
+#     multi_trajectory_x = np.zeros((num_ref+predicted_len, multi_num_UE[i]))
+#     multi_trajectory_y = np.zeros((num_ref+predicted_len, multi_num_UE[i]))
+#     multi_locux = np.random.randn(multi_num_UE[i]) * 10 - 5
+#     multi_locuy = np.random.randn(multi_num_UE[i]) * 10 - 5
+#     multi_trajectory_x[0,:] = multi_locux
+#     multi_trajectory_y[0,:] = multi_locuy
+#     for t in range(num_ref+predicted_len):
+#         for u in range(multi_num_UE[i]):
+#             move_x = np.random.uniform(-1, 1)
+#             move_y = np.random.uniform(-1, 1)
+#             multi_trajectory_x[t, u] = multi_trajectory_x[t-1, u] + move_x
+#             multi_trajectory_y[t, u] = multi_trajectory_y[t-1, u] + move_y
+            
+#     temp_dis = np.zeros((num_ref+predicted_len, multi_num_UE[i], num_RU))
+#     for t in range(num_ref+predicted_len):
+#         for u in range(multi_num_UE[i]):
+#             for j in range(num_RU):
+#                 dis = np.sqrt((multi_trajectory_x[t, u] - locrux[j]) ** 2 + (multi_trajectory_y[t, u] - locruy[j]) ** 2)
+#                 temp_dis[t, u, j] = dis
+                
+#     multi_distance_true.append(temp_dis) # shape(len(multi_num_UE), num_ref+predicted_len, multi_num_UE[i]), different shape
+    
+# print(multi_distance_true)
+
+# # multi_UE prediction
+# multi_prediction = []
+# for i in range(len(multi_num_UE)):
+#     for t in range(num_ref+predicted_len - num_ref):
+#         tmp = multi_distance_true[i]
+#         ref = np.array(tmp)[t:t+num_ref, :, :]
+#         flat = ref.reshape(-1, multi_num_UE[i] * num_RU)
+#         scaled = scaler_x.transform(flat).reshape(1, num_ref, multi_num_UE[i], num_RU)
+#         ref_tensor = torch.tensor(scaled, dtype=torch.float32)
+#         with torch.no_grad():
+#             pred_scaled = model(ref_tensor).cpu().numpy()
+#             # pred_scaled: (1, predicted_len, UE_i, num_RU)
+#         pred_flat = pred_scaled.reshape(-1, multi_num_UE[i] * num_RU)
+#         pred = scaler_y.inverse_transform(pred_flat).reshape(predicted_len, multi_num_UE[i], num_RU)
+
+#         multi_prediction.append(pred)
+
+
+
+
+# for i, temp_dis in enumerate(multi_distance_true):
+#     ue_count = multi_num_UE[i]
+#     preds_i = []
+
+#     for t in range(num_ref+predicted_len - num_ref):
+#         ref = temp_dis[t : t + num_ref, :, :].reshape(1, num_ref, ue_count, num_RU)
+#         flat = ref.reshape(-1, ue_count * num_RU)
+#         scaled = scaler_x.transform(flat).reshape(1, num_ref, ue_count, num_RU)
+#         ref_tensor = torch.tensor(scaled, dtype=torch.float32)
+#         with torch.no_grad():
+#             pred_scaled = model(ref_tensor).cpu().numpy()
+#             # pred_scaled: (1, predicted_len, UE_i, num_RU)
+#         pred_flat = pred_scaled.reshape(-1, ue_count * num_RU)
+#         pred = scaler_y.inverse_transform(pred_flat).reshape(predicted_len, ue_count, num_RU)
+
+#         preds_i.append(pred)
+        
+#     multi_prediction.append(np.stack(preds_i, axis=0))
+
 
 savemat('parameter.mat', {
     'T': T,
