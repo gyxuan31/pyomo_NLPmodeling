@@ -6,7 +6,7 @@ from sklearn.preprocessing import MinMaxScaler
 from scipy.io import savemat
 np.random.seed(1)
 
-T = 25
+T = 105
 num_ref = 5
 predicted_len = 3
 num_RU = 3
