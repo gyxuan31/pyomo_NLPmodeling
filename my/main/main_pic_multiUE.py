@@ -11,7 +11,7 @@ predicted_len = 3
 num_RU = 3
 num_RB = 50 # num RB/RU
 
-T = 15
+T = 50
 
 gamma = 3
 num_setreq = 3
@@ -182,15 +182,16 @@ savemat('multi_UE.mat', {
 print(multi_distance_true)
 print(multi_prediction)
 
-plt.figure()
-true_distance = distance_true[num_ref:num_ref + (T - num_ref - predicted_len + 1),1,1]  # (T - num_ref - predicted_len + 1,)
-plt.plot(true_distance.flatten(), 'r--', label='True Distance')
+plt.figure() # prediction & true distance
 pred_array = np.array(prediction)  # shape: (T - num_ref, predicted_len, total_UE, num_RU)
 pred_distance = []
 for i in range(pred_array.shape[0] - predicted_len + 1):
     pred_distance.append(pred_array[i, 0, 1,1])
 
 plt.plot(pred_distance, 'b', label='Predicted Distance')
+true_distance = distance_true[num_ref:num_ref + (T - num_ref - predicted_len + 1),1,1]  # (T - num_ref - predicted_len + 1,)
+plt.plot(true_distance.flatten(), 'r--', label='True Distance')
+
 plt.xlabel("Time Step")
 plt.ylabel("Distance")
 plt.xticks(np.arange(0, len(true_distance)+1, 3))
