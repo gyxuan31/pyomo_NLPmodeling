@@ -23,8 +23,9 @@ eta = 2
 multi_num_UE = [5, 10, 15, 20, 25, 30]
 # distance_true.shape(T, total_UE, num_RU)
 # prediction.shape(T-num_ref, predicted_len, total_UE, num_RU)
-multi_distance_true = {} # shape(len(multi_num_UE), T, multi_num_UE[i], num_RU), different shape
-multi_prediction = {} # shape(len(multi_num_UE), T, predicted_len, multi_num_UE[i], num_RU)
+multi_distance_true = np.zeros((len(multi_num_UE), T, multi_num_UE[-1]*num_RU, num_RU),dtype=float) # shape(len(multi_num_UE), T, multi_num_UE[i], num_RU)
+multi_prediction = np.zeros((len(multi_num_UE), T-num_ref, predicted_len, multi_num_UE[-1]*num_RU, num_RU),dtype=float) # shape(len(multi_num_UE), T, predicted_len, multi_num_UE[i], num_RU)
+
 for a in range(len(multi_num_UE)):
     UERU = multi_num_UE[a] # num of UE under every RU
     total_UE = UERU * num_RU
@@ -150,10 +151,12 @@ for a in range(len(multi_num_UE)):
             pred_flat = pred_scaled.reshape(-1, total_UE * num_RU)
             pred = scaler_y.inverse_transform(pred_flat).reshape(predicted_len, total_UE, num_RU)
             prediction.append(pred)
-        
-    multi_distance_true[multi_num_UE[a]] = distance_true
-    multi_prediction[multi_num_UE[a]] = prediction
+
+    multi_distance_true[a,:,:total_UE,:] = distance_true # shape(len(multi_num_UE), T, multi_num_UE[i], num_RU)
+    multi_prediction[a,:,:,:total_UE,:] = prediction  # shape(len(multi_num_UE), T, predicted_len, multi_num_UE[i], num_RU)
     
+
+
 
 
 
@@ -176,8 +179,8 @@ savemat('multi_UE.mat', {
     'multi_prediction': multi_prediction
     })
 
-print(distance_true)
-print(prediction)
+print(multi_distance_true)
+print(multi_prediction)
 
 plt.figure()
 true_distance = distance_true[num_ref:num_ref + (T - num_ref - predicted_len + 1),1,1]  # (T - num_ref - predicted_len + 1,)
