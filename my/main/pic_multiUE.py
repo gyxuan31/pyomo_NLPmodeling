@@ -9,9 +9,9 @@ np.random.seed(1)
 num_ref = 5
 predicted_len = 3
 num_RU = 3
-num_RB = 50 # num RB/RU
+num_RB = 35 # num RB/RU
 
-T = 50
+T = 55
 
 gamma = 3
 num_setreq = 3
@@ -20,7 +20,7 @@ P = 0.3
 sigmsqr = 10**((-173 - 30)/10)
 eta = 2
 
-multi_num_UE = [5, 10, 15, 20, 25, 30]
+multi_num_UE = [3, 6, 9, 12, 15, 18, 20] # UERU, under one RU
 # distance_true.shape(T, total_UE, num_RU)
 # prediction.shape(T-num_ref, predicted_len, total_UE, num_RU)
 multi_distance_true = np.zeros((len(multi_num_UE), T, multi_num_UE[-1]*num_RU, num_RU),dtype=float) # shape(len(multi_num_UE), T, multi_num_UE[i], num_RU)
