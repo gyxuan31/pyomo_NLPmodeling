@@ -22,8 +22,6 @@ multi_num_UE = params['multi_num_UE'].squeeze()
 
 distance = params['multi_distance_true'].squeeze()
 
-prediction = params['multi_prediction'].squeeze()
-
 # load output
 output = loadmat('multi_output.mat')
 multi_rec_dr_random = output['multi_rec_dr_random'].squeeze()
@@ -142,12 +140,13 @@ plt.show()
 # Plot - every RU
 fig, axes = plt.subplots(1, num_RU, constrained_layout=True)
 
-for i in range(num_RU):
-    
+for rho in range(num_RU):
+    util_ru_op = np.zeros(len(multi_num_UE))
+    util_ru_random = np.zeros(len(multi_num_UE))
+    util_ru_avg = np.zeros(len(multi_num_UE))
     for a in range(3):
         total_UE = int(multi_num_UE[a] * num_RU)
-        distance = distance[a,:,:total_UE,:].reshape((T, total_UE, num_RU))
-        prediction = prediction[a,:,:,:total_UE,:].reshape((T - num_ref, predicted_len, total_UE, num_RU))
+        dist = distance[a,:,:total_UE,:].reshape((T, total_UE, num_RU))
 
         util_random = []
         util_avg = []
@@ -163,52 +162,48 @@ for i in range(num_RU):
             for i in range(total_UE):
                 temp = np.zeros(num_RU)
                 for j in range(num_RU):
-                    temp[j] = distance[t+num_ref, i, j]
+                    temp[j] = dist[t+num_ref, i, j]
                 user_RU_norm[i] = np.argmin(temp)
                 
-            util_ru_op = np.zeros(T)
-            util_ru_random = np.zeros(T)
-            util_ru_avg = np.zeros(T)
-            util_op = np.zeros(T)
-            util_random = np.zeros(T)
-            util_avg = np.zeros(T)
+            util_op = np.zeros(T-num_ref)
+            util_random = np.zeros(T-num_ref)
+            util_avg = np.zeros(T-num_ref)
 
-            for b in range(T - num_ref):
-                RU_UE_norm = []
-                for r in range(num_RU):
-                    idx = np.where(user_RU_norm == r)[0]
-                    RU_UE_norm.append(idx)
+            RU_UE_norm = []
+            for r in range(num_RU):
+                idx = np.where(user_RU_norm == r)[0]
+                RU_UE_norm.append(idx)
 
-                # RANDOM
-                e_ran = e_random[RU_UE_norm[i], :]
-                util_random_list = np.any(e_ran, axis=0)
-                util_random[b] = np.sum(util_random_list) / float(num_RB)
+            # RANDOM
+            e_ran = e_random[RU_UE_norm[rho], :]
+            util_random_list = np.any(e_ran, axis=0)
+            util_random[t] = np.sum(util_random_list) / float(num_RB)
 
-                # AVG
-                e_av = e_avg[RU_UE_norm[i], :]
-                util_avg_list = np.any(e_avg, axis=0)
-                util_avg[b] = np.sum(util_avg_list) / float(num_RB)
+            # AVG
+            e_av = e_avg[RU_UE_norm[rho], :]
+            util_avg_list = np.any(e_avg, axis=0)
+            util_avg[t] = np.sum(util_avg_list) / float(num_RB)
 
-                # OP
-                e_o = e_op[RU_UE_norm[i], :]
-                util_op_list = np.any(e_op, axis=0)
-                util_op[b] = np.sum(util_op_list) / float(num_RB)
-        util_op_mean.append(np.mean(np.array(util_op)))
-        util_random_mean.append(np.mean(np.array(util_random)))
+            # OP
+            e_o = e_op[RU_UE_norm[rho], :]
+            util_op_list = np.any(e_op, axis=0)
+            util_op[t] = np.sum(util_op_list) / float(num_RB)
+                
+        util_ru_op = np.mean(np.array(util_op))
+        util_random_mean = np.mean(np.array(util_random))
         util_avg_mean.append(np.mean(np.array(util_avg)))
 
-        dr_op.append(multi_rec_dr_op1[a-3] / total_UE)
-        dr_avg.append(multi_rec_dr_avg1[a-3] / total_UE)
-        dr_random.append(multi_rec_dr_random1[a-3] / total_UE)
+        dr_op.append(multi_rec_dr_op[a] / total_UE)
+        dr_avg.append(multi_rec_dr_avg[a] / total_UE)
+        dr_random.append(multi_rec_dr_random[a] / total_UE)
 
-    ax = axes[i] if num_RU > 1 else axes
-    ax.plot(np.arange(1, T - num_ref + 1), util_random[:T - num_ref], linewidth=1.5, color='#3480b8', label='Static Allocation')
-    ax.plot(np.arange(1, T - num_ref + 1), util_avg[:T - num_ref], linewidth=1.5, color='#8fbc8f', label='Average Allocation')
-    ax.plot(np.arange(1, T - num_ref + 1), util_op[:T - num_ref], linewidth=1.5, color='#c82423', label='MPC-based Allocation')
+    ax = axes[rho]
+    ax.plot(util_random, linewidth=1.5, color='#3480b8', label='Static Allocation')
+    ax.plot(util_avg, linewidth=1.5, color='#8fbc8f', label='Average Allocation')
+    ax.plot(util_op, linewidth=1.5, color='#c82423', label='MPC-based Allocation')
 
-    ax.set_xlim(1, T - num_ref)
     ax.set_ylim(0, 1)
-    ax.set_xlabel('Time Step')
+    ax.set_xlabel('UE number')
     ax.set_ylabel('RB Utilization (%)')
     ax.grid(True)
     ax.set_title(f'RU {a+1}')
