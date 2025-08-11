@@ -2,6 +2,7 @@ import numpy as np
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 np.set_printoptions(threshold=np.inf, linewidth=np.inf)
+np.set_printoptions(precision=2, suppress=True)
 
 # load parameters
 params = loadmat('multi_UE.mat')
@@ -181,26 +182,25 @@ for rho in range(num_RU):
 
             # AVG
             e_av = e_avg[RU_UE_norm[rho], :]
-            util_avg_list = np.any(e_avg, axis=0)
+            util_avg_list = np.any(e_av, axis=0)
             util_avg[t] = np.sum(util_avg_list) / float(num_RB)
 
             # OP
             e_o = e_op[RU_UE_norm[rho], :]
-            util_op_list = np.any(e_op, axis=0)
-            util_op[t] = np.sum(util_op_list) / float(num_RB)
-                
-        util_ru_op = np.mean(np.array(util_op))
-        util_random_mean = np.mean(np.array(util_random))
-        util_avg_mean.append(np.mean(np.array(util_avg)))
+            util_op_list = np.any(e_o, axis=0)
+            util_op[t] = float(np.sum(util_op_list) / float(num_RB))
+            print(np.sum(util_op_list))
+            print(util_op[t])
+        print(util_op)
+        util_ru_op[a] = np.mean(util_op)
+        util_ru_random[a] = np.mean(np.array(util_random))
+        util_ru_avg[a] = np.mean(np.array(util_avg))
 
-        dr_op.append(multi_rec_dr_op[a] / total_UE)
-        dr_avg.append(multi_rec_dr_avg[a] / total_UE)
-        dr_random.append(multi_rec_dr_random[a] / total_UE)
 
     ax = axes[rho]
-    ax.plot(util_random, linewidth=1.5, color='#3480b8', label='Static Allocation')
-    ax.plot(util_avg, linewidth=1.5, color='#8fbc8f', label='Average Allocation')
-    ax.plot(util_op, linewidth=1.5, color='#c82423', label='MPC-based Allocation')
+    ax.plot(util_ru_random, linewidth=1.5, color='#3480b8', label='Static Allocation')
+    ax.plot(util_ru_avg, linewidth=1.5, color='#8fbc8f', label='Average Allocation')
+    ax.plot(util_ru_op, linewidth=1.5, color='#c82423', label='MPC-based Allocation')
 
     ax.set_ylim(0, 1)
     ax.set_xlabel('UE number')
@@ -210,4 +210,4 @@ for rho in range(num_RU):
 
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right')
-    plt.show()
+plt.show()
