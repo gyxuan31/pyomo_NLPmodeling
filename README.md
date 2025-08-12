@@ -1,4 +1,4 @@
-# Optimization Modeling with Python-Pyomo 
+# Optimization Modeling with Python-Pyomo
 
 This repository explores **MINLP** (Mixed-Integer Nonlinear Programming) and **NLP** (Nonlinear Programming) problems using Pyomo. 
 
